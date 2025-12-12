@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import os
 
 from src.db.session import get_db
-from src.db.models import RawFile
+from src.db.models import RawFile, Entry
 from src.rag.search import search_entries_semantic
 from src.llm_client import generate_text, list_models, OLLAMA_URL, MODEL, EMBEDDING_MODEL
 import requests
@@ -56,6 +56,27 @@ def get_system_status():
         }
     }
 
+@app.get("/system/metrics")
+def get_system_metrics(db: Session = Depends(get_db)):
+    total_files = db.query(RawFile).count()
+    processed_files = db.query(RawFile).filter(RawFile.status == 'ok').count()
+    total_entries = db.query(Entry).count()
+    enriched_entries = db.query(Entry).filter(Entry.status == 'enriched').count()
+    embedded_entries = db.query(Entry).filter(Entry.embedding.isnot(None)).count()
+    
+    return {
+        "files": {
+            "total": total_files,
+            "processed": processed_files,
+            "pending": total_files - processed_files
+        },
+        "entries": {
+            "total": total_entries,
+            "enriched": enriched_entries,
+            "embedded": embedded_entries
+        }
+    }
+
 @app.get("/files/{file_id}/content")
 def get_file_content(file_id: int, db: Session = Depends(get_db)):
     file = db.query(RawFile).filter(RawFile.id == file_id).first()
@@ -66,6 +87,23 @@ def get_file_content(file_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="File not found on disk")
         
     return FileResponse(file.path, filename=file.filename)
+
+@app.get("/files")
+def list_files(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+    total = db.query(RawFile).count()
+    files = db.query(RawFile).order_by(RawFile.id.desc()).offset(skip).limit(limit).all()
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": f.id,
+                "filename": f.filename,
+                "path": f.path,
+                "created_at": f.created_at,
+                "status": f.status
+            } for f in files
+        ]
+    }
 
 @app.get("/files/{file_id}", response_model=FileDetail)
 def get_file_details(file_id: int, db: Session = Depends(get_db)):
