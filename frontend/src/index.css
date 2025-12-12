@@ -222,3 +222,50 @@ button:disabled {
   color: #ddd;
   margin: 0;
 }
+
+.document-view-container {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: left;
+  width: 100%;
+}
+
+.document-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #333;
+  padding-bottom: 1rem;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: 1px solid #444;
+  padding: 0.5rem 1rem;
+}
+
+.back-btn:hover {
+  background: #333;
+}
+
+.document-content {
+  background: #1a1a1a;
+  padding: 2rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+  #root {
+    padding: 1rem;
+  }
+  
+  .document-content {
+    padding: 1rem;
+  }
+}
