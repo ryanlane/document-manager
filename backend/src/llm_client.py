@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
 MOCK_MODE = os.getenv("OLLAMA_MOCK", "false").lower() == "true"
 
 def generate_json(prompt: str, model: str = MODEL) -> Optional[Dict[str, Any]]:
@@ -47,7 +48,7 @@ def generate_json(prompt: str, model: str = MODEL) -> Optional[Dict[str, Any]]:
         logger.error(f"Ollama request failed: {e}")
         return None
 
-def embed_text(text: str, model: str = MODEL) -> Optional[List[float]]:
+def embed_text(text: str, model: str = EMBEDDING_MODEL) -> Optional[List[float]]:
     if MOCK_MODE:
         # Return random vector of length 768
         import random

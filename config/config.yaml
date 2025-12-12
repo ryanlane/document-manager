@@ -34,4 +34,5 @@ database:
 llm:
   provider: "ollama"
   base_url: "http://host.docker.internal:11434"
-  model: "llama3"
+  model: "dolphin-phi"
+  embedding_model: "nomic-embed-text"

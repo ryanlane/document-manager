@@ -36,10 +36,12 @@ services:
       - TIKA_URL=http://tika:9998
       - OLLAMA_URL=http://host.docker.internal:11434
       - OLLAMA_MOCK=false
+      - OLLAMA_MODEL=dolphin-phi
+      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
     depends_on:
       - db
       - tika
-    command: tail -f /dev/null # Keep alive for now, replace with actual worker command later
+    command: python -m src.worker_loop
     networks:
       - archive_net
     extra_hosts:
@@ -63,6 +65,8 @@ services:
       - DB_NAME=archive_brain
       - OLLAMA_URL=http://host.docker.internal:11434
       - OLLAMA_MOCK=false
+      - OLLAMA_MODEL=dolphin-phi
+      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
     depends_on:
       - db
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -70,6 +74,18 @@ services:
       - archive_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - archive_net
 
 volumes:
   postgres_data:

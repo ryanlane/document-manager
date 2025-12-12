@@ -29,7 +29,7 @@ def main():
     db = next(get_db())
     
     # Process entries without embedding
-    entries = db.query(Entry).filter(Entry.embedding.is_(None)).limit(50).all()
+    entries = db.query(Entry).filter(Entry.embedding.is_(None)).limit(200).all()
     
     if not entries:
         logger.info("No entries needing embedding found.")
