@@ -1,0 +1,10 @@
+psycopg2-binary
+sqlalchemy
+alembic
+pyyaml
+requests
+pydantic
+pgvector
+tika
+fastapi
+uvicorn

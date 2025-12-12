@@ -1,0 +1,37 @@
+# Archive Brain Configuration
+
+# Source roots to scan
+sources:
+  include:
+    - "/data/archive/docs"
+    # Network drive path mapped inside container
+    - "/data/archive/story"
+  
+  exclude:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/__pycache__/**"
+    - "**/*.tmp"
+    - "**/*.bak"
+
+# File extensions to process
+extensions:
+  - ".txt"
+  - ".md"
+  - ".html"
+  - ".pdf"
+  - ".docx"
+
+# Database configuration (matches docker-compose)
+database:
+  host: "db"
+  port: 5432
+  user: "postgres"
+  password: "password"
+  dbname: "archive_brain"
+
+# LLM Configuration
+llm:
+  provider: "ollama"
+  base_url: "http://host.docker.internal:11434"
+  model: "llama3"
