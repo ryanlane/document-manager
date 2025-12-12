@@ -90,3 +90,18 @@ def generate_text(prompt: str, model: str = MODEL) -> Optional[str]:
     except requests.RequestException as e:
         logger.error(f"Ollama text generation failed: {e}")
         return None
+
+def list_models() -> List[str]:
+    if MOCK_MODE:
+        return ["mock-model-1", "mock-model-2"]
+        
+    url = f"{OLLAMA_URL}/api/tags"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        # Extract model names
+        return [model['name'] for model in data.get('models', [])]
+    except requests.RequestException as e:
+        logger.error(f"Failed to list Ollama models: {e}")
+        return []

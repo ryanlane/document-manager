@@ -92,3 +92,133 @@ button:disabled {
 .loading {
   color: #888;
 }
+
+.status-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #333;
+  display: flex;
+  gap: 2rem;
+  font-size: 0.8rem;
+  color: #888;
+  justify-content: center;
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #666;
+}
+
+.status-indicator.online {
+  background-color: #4caf50;
+  box-shadow: 0 0 5px #4caf50;
+}
+
+.status-indicator.offline {
+  background-color: #f44336;
+}
+
+.status-label {
+  font-weight: bold;
+  color: #aaa;
+}
+
+.status-value {
+  font-family: monospace;
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.model-select {
+  padding: 0.6em;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background-color: #1a1a1a;
+  color: #aaa;
+  font-size: 0.9em;
+  max-width: 150px;
+}
+
+.source-link {
+  color: #646cff;
+  text-decoration: none;
+}
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
+.reader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.reader-modal {
+  background: #242424;
+  width: 80%;
+  height: 80%;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  border: 1px solid #444;
+}
+
+.reader-header {
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.reader-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 0.5rem;
+}
+
+.close-btn:hover {
+  color: #fff;
+}
+
+.reader-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  text-align: left;
+  background: #1a1a1a;
+}
+
+.reader-content pre {
+  white-space: pre-wrap;
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.6;
+  color: #ddd;
+  margin: 0;
+}
