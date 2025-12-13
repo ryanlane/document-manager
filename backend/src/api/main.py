@@ -58,23 +58,51 @@ def get_system_status():
 
 @app.get("/system/metrics")
 def get_system_metrics(db: Session = Depends(get_db)):
+    from sqlalchemy import func as sql_func
+    
     total_files = db.query(RawFile).count()
     processed_files = db.query(RawFile).filter(RawFile.status == 'ok').count()
+    failed_files = db.query(RawFile).filter(RawFile.status == 'extract_failed').count()
     total_entries = db.query(Entry).count()
     enriched_entries = db.query(Entry).filter(Entry.status == 'enriched').count()
     embedded_entries = db.query(Entry).filter(Entry.embedding.isnot(None)).count()
+    pending_entries = db.query(Entry).filter(Entry.status == 'pending').count()
+    
+    # Get recent activity - last 10 files
+    recent_files = db.query(RawFile).order_by(RawFile.created_at.desc()).limit(10).all()
+    
+    # Get file size stats
+    size_result = db.query(sql_func.sum(RawFile.size_bytes)).scalar() or 0
+    
+    # Get extension breakdown
+    ext_counts = db.query(RawFile.extension, sql_func.count(RawFile.id)).group_by(RawFile.extension).order_by(sql_func.count(RawFile.id).desc()).limit(10).all()
     
     return {
         "files": {
             "total": total_files,
             "processed": processed_files,
+            "failed": failed_files,
             "pending": total_files - processed_files
         },
         "entries": {
             "total": total_entries,
             "enriched": enriched_entries,
-            "embedded": embedded_entries
-        }
+            "embedded": embedded_entries,
+            "pending": pending_entries
+        },
+        "storage": {
+            "total_bytes": size_result,
+            "total_mb": round(size_result / (1024 * 1024), 2) if size_result else 0
+        },
+        "extensions": [{"ext": ext, "count": count} for ext, count in ext_counts],
+        "recent_files": [
+            {
+                "id": f.id,
+                "filename": f.filename,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+                "status": f.status
+            } for f in recent_files
+        ]
     }
 
 @app.get("/files/{file_id}/content")
