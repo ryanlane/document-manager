@@ -21,6 +21,19 @@ logger = logging.getLogger(__name__)
 # Progress tracking
 SHARED_DIR = os.environ.get("SHARED_DIR", "/app/shared")
 PROGRESS_FILE = os.path.join(SHARED_DIR, "ingest_progress.json")
+STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
+
+def check_stop_signal():
+    """Check if the worker has been paused or ingest disabled."""
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r') as f:
+                state = json.load(f)
+                if not state.get("running", True) or not state.get("ingest", True):
+                    return True
+    except Exception:
+        pass
+    return False
 
 def update_progress(phase: str, current: int, total: int, new_files: int = 0, updated_files: int = 0, skipped_files: int = 0, current_file: str = ""):
     """Update the progress file for the dashboard."""
@@ -216,6 +229,7 @@ def main():
     update_progress("counting", 0, 0)
     logger.info("Counting files to process...")
     files_to_process = []
+    count = 0
     for root in include_paths:
         if not root.exists():
             logger.warning(f"Source root {root} does not exist")
@@ -227,6 +241,14 @@ def main():
                 
             if should_process(file_path, include_exts, exclude_patterns):
                 files_to_process.append(file_path)
+                count += 1
+                if count % 1000 == 0:
+                    if check_stop_signal():
+                        logger.info("Ingest paused by user request during counting.")
+                        update_progress("idle", 0, 0)
+                        return
+                    update_progress("counting", count, 0, current_file=str(file_path.name)[:50])
+
                 if args.limit and len(files_to_process) >= args.limit:
                     break
         if args.limit and len(files_to_process) >= args.limit:

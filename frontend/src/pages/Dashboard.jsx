@@ -164,16 +164,33 @@ function Dashboard() {
         <div className={`${styles.section} ${styles.progressSection}`}>
           <div className={styles.progressHeader}>
             <h2>
-              {ingestProgress.phase === 'counting' && <><RefreshCw size={18} className="spin" /> Counting Files...</>}
-              {ingestProgress.phase === 'scanning' && <><RefreshCw size={18} className="spin" /> Scanning Files</>}
+              {ingestProgress.phase === 'loading_cache' && <><RefreshCw size={18} className={styles.spin} /> Loading Cache...</>}
+              {ingestProgress.phase === 'counting' && <><RefreshCw size={18} className={styles.spin} /> Counting Files...</>}
+              {ingestProgress.phase === 'scanning' && <><RefreshCw size={18} className={styles.spin} /> Scanning Files</>}
               {ingestProgress.phase === 'complete' && <><CheckCircle size={18} color="#42b883" /> Scan Complete</>}
             </h2>
             {ingestProgress.phase === 'scanning' && (
               <span className={styles.progressPct}>{ingestProgress.percent}%</span>
             )}
+            {ingestProgress.phase === 'counting' && (
+              <span className={styles.progressPct}>{ingestProgress.current.toLocaleString()} found</span>
+            )}
           </div>
           
-          {ingestProgress.total > 0 && (
+          {ingestProgress.phase === 'counting' && (
+             <div className={styles.progressDetails}>
+                <span className={styles.progressCount}>
+                  Found {ingestProgress.current.toLocaleString()} files so far...
+                </span>
+                {ingestProgress.current_file && (
+                  <span className={styles.progressCurrent} title={ingestProgress.current_file}>
+                    ...{ingestProgress.current_file}
+                  </span>
+                )}
+             </div>
+          )}
+
+          {ingestProgress.total > 0 && ingestProgress.phase !== 'counting' && (
             <>
               <div className={`${styles.progressBar} ${styles.large}`}>
                 <div 
