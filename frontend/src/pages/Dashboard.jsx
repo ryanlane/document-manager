@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, Play, Pause, Power, RefreshCw, CheckCircle, FilePlus, FileEdit, FileX } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import styles from './Dashboard.module.css'
 
 function Dashboard() {
   const [metrics, setMetrics] = useState(null)
@@ -88,17 +89,17 @@ function Dashboard() {
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
   }
 
-  if (loading) return <div className="container">Loading metrics...</div>
+  if (loading) return <div className={styles.loading}>Loading metrics...</div>
 
   const enrichedPct = ((metrics.entries.enriched / (metrics.entries.total || 1)) * 100).toFixed(1)
   const embeddedPct = ((metrics.entries.embedded / (metrics.entries.total || 1)) * 100).toFixed(1)
 
   return (
-    <div className="container dashboard">
-      <div className="dashboard-header">
+    <div className={styles.page}>
+      <div className={styles.header}>
         <h1>System Dashboard</h1>
         {lastUpdate && (
-          <span className="last-update">
+          <span className={styles.lastUpdate}>
             <Clock size={14} /> Updated {lastUpdate.toLocaleTimeString()}
           </span>
         )}
@@ -106,53 +107,53 @@ function Dashboard() {
 
       {/* Worker Controls */}
       {workerState && (
-        <div className="dashboard-section controls-section">
-          <div className="controls-header">
+        <div className={`${styles.section} ${styles.controlsSection}`}>
+          <div className={styles.controlsHeader}>
             <h2>Pipeline Controls</h2>
             <button 
-              className={`master-toggle ${workerState.running ? 'running' : 'paused'}`}
+              className={`${styles.masterToggle} ${workerState.running ? styles.running : styles.paused}`}
               onClick={toggleAllProcesses}
             >
               {workerState.running ? <Pause size={18} /> : <Play size={18} />}
               {workerState.running ? 'Pause All' : 'Resume All'}
             </button>
           </div>
-          <div className="controls-grid">
+          <div className={styles.controlsGrid}>
             <button 
-              className={`control-btn ${workerState.ingest ? 'active' : ''}`}
+              className={`${styles.controlBtn} ${workerState.ingest ? styles.active : ''}`}
               onClick={() => toggleProcess('ingest')}
               disabled={!workerState.running}
             >
               <Power size={16} />
               <span>Ingest</span>
-              <span className="control-status">{workerState.ingest ? 'ON' : 'OFF'}</span>
+              <span className={styles.controlStatus}>{workerState.ingest ? 'ON' : 'OFF'}</span>
             </button>
             <button 
-              className={`control-btn ${workerState.segment ? 'active' : ''}`}
+              className={`${styles.controlBtn} ${workerState.segment ? styles.active : ''}`}
               onClick={() => toggleProcess('segment')}
               disabled={!workerState.running}
             >
               <Power size={16} />
               <span>Segment</span>
-              <span className="control-status">{workerState.segment ? 'ON' : 'OFF'}</span>
+              <span className={styles.controlStatus}>{workerState.segment ? 'ON' : 'OFF'}</span>
             </button>
             <button 
-              className={`control-btn ${workerState.enrich ? 'active' : ''}`}
+              className={`${styles.controlBtn} ${workerState.enrich ? styles.active : ''}`}
               onClick={() => toggleProcess('enrich')}
               disabled={!workerState.running}
             >
               <Power size={16} />
               <span>Enrich</span>
-              <span className="control-status">{workerState.enrich ? 'ON' : 'OFF'}</span>
+              <span className={styles.controlStatus}>{workerState.enrich ? 'ON' : 'OFF'}</span>
             </button>
             <button 
-              className={`control-btn ${workerState.embed ? 'active' : ''}`}
+              className={`${styles.controlBtn} ${workerState.embed ? styles.active : ''}`}
               onClick={() => toggleProcess('embed')}
               disabled={!workerState.running}
             >
               <Power size={16} />
               <span>Embed</span>
-              <span className="control-status">{workerState.embed ? 'ON' : 'OFF'}</span>
+              <span className={styles.controlStatus}>{workerState.embed ? 'ON' : 'OFF'}</span>
             </button>
           </div>
         </div>
@@ -160,23 +161,23 @@ function Dashboard() {
 
       {/* Ingest Progress */}
       {ingestProgress && ingestProgress.phase !== 'idle' && (
-        <div className="dashboard-section progress-section">
-          <div className="progress-header">
+        <div className={`${styles.section} ${styles.progressSection}`}>
+          <div className={styles.progressHeader}>
             <h2>
               {ingestProgress.phase === 'counting' && <><RefreshCw size={18} className="spin" /> Counting Files...</>}
               {ingestProgress.phase === 'scanning' && <><RefreshCw size={18} className="spin" /> Scanning Files</>}
               {ingestProgress.phase === 'complete' && <><CheckCircle size={18} color="#42b883" /> Scan Complete</>}
             </h2>
             {ingestProgress.phase === 'scanning' && (
-              <span className="progress-pct">{ingestProgress.percent}%</span>
+              <span className={styles.progressPct}>{ingestProgress.percent}%</span>
             )}
           </div>
           
           {ingestProgress.total > 0 && (
             <>
-              <div className="progress-bar large">
+              <div className={`${styles.progressBar} ${styles.large}`}>
                 <div 
-                  className="progress-fill" 
+                  className={styles.progressFill}
                   style={{ 
                     width: `${ingestProgress.percent}%`, 
                     backgroundColor: ingestProgress.phase === 'complete' ? '#42b883' : '#646cff' 
@@ -184,27 +185,27 @@ function Dashboard() {
                 ></div>
               </div>
               
-              <div className="progress-details">
-                <span className="progress-count">
+              <div className={styles.progressDetails}>
+                <span className={styles.progressCount}>
                   {ingestProgress.current.toLocaleString()} / {ingestProgress.total.toLocaleString()} files
                 </span>
                 {ingestProgress.current_file && (
-                  <span className="progress-current" title={ingestProgress.current_file}>
+                  <span className={styles.progressCurrent} title={ingestProgress.current_file}>
                     {ingestProgress.current_file}
                   </span>
                 )}
               </div>
               
-              <div className="progress-stats">
-                <div className="stat-item new">
+              <div className={styles.progressStats}>
+                <div className={`${styles.statItem} ${styles.new}`}>
                   <FilePlus size={14} />
                   <span>{ingestProgress.new_files.toLocaleString()} new</span>
                 </div>
-                <div className="stat-item updated">
+                <div className={`${styles.statItem} ${styles.updated}`}>
                   <FileEdit size={14} />
                   <span>{ingestProgress.updated_files.toLocaleString()} updated</span>
                 </div>
-                <div className="stat-item skipped">
+                <div className={`${styles.statItem} ${styles.skipped}`}>
                   <FileX size={14} />
                   <span>{ingestProgress.skipped_files.toLocaleString()} unchanged</span>
                 </div>
@@ -214,71 +215,71 @@ function Dashboard() {
         </div>
       )}
       
-      <div className="metrics-grid">
-        <div className="metric-card">
-          <div className="metric-icon"><FileText color="#646cff" /></div>
-          <div className="metric-content">
+      <div className={styles.metricsGrid}>
+        <div className={styles.metricCard}>
+          <div className={styles.metricIcon}><FileText color="#646cff" /></div>
+          <div className={styles.metricContent}>
             <h3>Total Files</h3>
-            <p className="metric-value">{metrics.files.total.toLocaleString()}</p>
-            <p className="metric-sub">Processed: {metrics.files.processed.toLocaleString()}</p>
+            <p className={styles.metricValue}>{metrics.files.total.toLocaleString()}</p>
+            <p className={styles.metricSub}>Processed: {metrics.files.processed.toLocaleString()}</p>
           </div>
         </div>
 
-        <div className="metric-card">
-          <div className="metric-icon"><HardDrive color="#888" /></div>
-          <div className="metric-content">
+        <div className={styles.metricCard}>
+          <div className={styles.metricIcon}><HardDrive color="#888" /></div>
+          <div className={styles.metricContent}>
             <h3>Storage</h3>
-            <p className="metric-value">{formatBytes(metrics.storage.total_bytes)}</p>
+            <p className={styles.metricValue}>{formatBytes(metrics.storage.total_bytes)}</p>
           </div>
         </div>
 
-        <div className="metric-card">
-          <div className="metric-icon"><Database color="#42b883" /></div>
-          <div className="metric-content">
+        <div className={styles.metricCard}>
+          <div className={styles.metricIcon}><Database color="#42b883" /></div>
+          <div className={styles.metricContent}>
             <h3>Total Entries</h3>
-            <p className="metric-value">{metrics.entries.total.toLocaleString()}</p>
-            <p className="metric-sub">Pending: {metrics.entries.pending.toLocaleString()}</p>
+            <p className={styles.metricValue}>{metrics.entries.total.toLocaleString()}</p>
+            <p className={styles.metricSub}>Pending: {metrics.entries.pending.toLocaleString()}</p>
           </div>
         </div>
 
         {metrics.files.failed > 0 && (
-          <div className="metric-card error-card">
-            <div className="metric-icon"><AlertCircle color="#ff6464" /></div>
-            <div className="metric-content">
+          <div className={`${styles.metricCard} ${styles.error}`}>
+            <div className={styles.metricIcon}><AlertCircle color="#ff6464" /></div>
+            <div className={styles.metricContent}>
               <h3>Failed Files</h3>
-              <p className="metric-value">{metrics.files.failed}</p>
+              <p className={styles.metricValue}>{metrics.files.failed}</p>
             </div>
           </div>
         )}
 
-        <div className="metric-card wide-card">
-          <div className="metric-icon"><Layers color="#ffc517" /></div>
-          <div className="metric-content">
+        <div className={styles.metricCard}>
+          <div className={styles.metricIcon}><Layers color="#ffc517" /></div>
+          <div className={styles.metricContent}>
             <h3>Enriched</h3>
-            <div className="metric-row">
-              <p className="metric-value">{metrics.entries.enriched.toLocaleString()}</p>
-              <span className="metric-pct">{enrichedPct}%</span>
+            <div className={styles.metricRow}>
+              <p className={styles.metricValue}>{metrics.entries.enriched.toLocaleString()}</p>
+              <span className={styles.metricPct}>{enrichedPct}%</span>
             </div>
-            <div className="progress-bar">
+            <div className={styles.progressBar}>
               <div 
-                className="progress-fill" 
+                className={styles.progressFill}
                 style={{ width: `${enrichedPct}%`, backgroundColor: '#ffc517' }}
               ></div>
             </div>
           </div>
         </div>
 
-        <div className="metric-card wide-card">
-          <div className="metric-icon"><Cpu color="#ff6464" /></div>
-          <div className="metric-content">
+        <div className={styles.metricCard}>
+          <div className={styles.metricIcon}><Cpu color="#ff6464" /></div>
+          <div className={styles.metricContent}>
             <h3>Embedded</h3>
-            <div className="metric-row">
-              <p className="metric-value">{metrics.entries.embedded.toLocaleString()}</p>
-              <span className="metric-pct">{embeddedPct}%</span>
+            <div className={styles.metricRow}>
+              <p className={styles.metricValue}>{metrics.entries.embedded.toLocaleString()}</p>
+              <span className={styles.metricPct}>{embeddedPct}%</span>
             </div>
-            <div className="progress-bar">
+            <div className={styles.progressBar}>
               <div 
-                className="progress-fill" 
+                className={styles.progressFill}
                 style={{ width: `${embeddedPct}%`, backgroundColor: '#ff6464' }}
               ></div>
             </div>
@@ -287,13 +288,13 @@ function Dashboard() {
       </div>
 
       {metrics.extensions && metrics.extensions.length > 0 && (
-        <div className="dashboard-section">
+        <div className={styles.section}>
           <h2>File Types</h2>
-          <div className="ext-grid">
+          <div className={styles.extGrid}>
             {metrics.extensions.map(ext => (
-              <div key={ext.ext} className="ext-chip">
-                <span className="ext-name">{ext.ext}</span>
-                <span className="ext-count">{ext.count.toLocaleString()}</span>
+              <div key={ext.ext} className={styles.extChip}>
+                <span className={styles.extName}>{ext.ext}</span>
+                <span className={styles.extCount}>{ext.count.toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -301,14 +302,14 @@ function Dashboard() {
       )}
 
       {metrics.recent_files && metrics.recent_files.length > 0 && (
-        <div className="dashboard-section">
+        <div className={styles.section}>
           <h2>Recently Ingested</h2>
-          <div className="recent-list">
+          <div className={styles.recentList}>
             {metrics.recent_files.map(file => (
-              <Link to={`/document/${file.id}`} key={file.id} className="recent-item">
+              <Link to={`/document/${file.id}`} key={file.id} className={styles.recentItem}>
                 <FileText size={16} />
-                <span className="recent-filename">{file.filename}</span>
-                <span className={`recent-status ${file.status}`}>{file.status}</span>
+                <span className={styles.recentFilename}>{file.filename}</span>
+                <span className={`${styles.recentStatus} ${file.status === 'ok' ? styles.ok : styles.extractFailed}`}>{file.status}</span>
               </Link>
             ))}
           </div>

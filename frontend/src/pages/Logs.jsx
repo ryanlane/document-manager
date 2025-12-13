@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import styles from './Logs.module.css'
 
 function Logs() {
   const [logs, setLogs] = useState([])
@@ -36,23 +37,23 @@ function Logs() {
   }, [logs])
 
   const getLogClass = (line) => {
-    if (line.includes('ERROR')) return 'log-error'
-    if (line.includes('WARNING')) return 'log-warning'
-    if (line.includes('Starting')) return 'log-info'
+    if (line.includes('ERROR')) return styles.logError
+    if (line.includes('WARNING')) return styles.logWarning
+    if (line.includes('Starting')) return styles.logInfo
     return ''
   }
 
   return (
-    <div className="container logs-page">
-      <div className="logs-header">
-        <div className="logs-title">
-          <Link to="/dashboard" className="back-btn">
+    <div className={styles.page}>
+      <div className={styles.header}>
+        <div className={styles.title}>
+          <Link to="/dashboard" className={styles.backBtn}>
             <ArrowLeft size={20} />
           </Link>
           <h1>Worker Logs</h1>
         </div>
-        <div className="logs-controls">
-          <label className="auto-refresh-toggle">
+        <div className={styles.controls}>
+          <label className={styles.autoRefresh}>
             <input 
               type="checkbox" 
               checked={autoRefresh} 
@@ -60,23 +61,23 @@ function Logs() {
             />
             Auto-refresh
           </label>
-          <button onClick={fetchLogs} className="refresh-btn">
+          <button onClick={fetchLogs} className={styles.refreshBtn}>
             <RefreshCw size={16} /> Refresh
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div>Loading logs...</div>
+        <div className={styles.loading}>Loading logs...</div>
       ) : logs.length === 0 ? (
-        <div className="no-logs">
+        <div className={styles.noLogs}>
           No logs available. The worker may need to be restarted to enable logging.
         </div>
       ) : (
-        <div className="logs-container">
-          <pre className="logs-content">
+        <div className={styles.container}>
+          <pre className={styles.content}>
             {logs.map((line, i) => (
-              <div key={i} className={`log-line ${getLogClass(line)}`}>
+              <div key={i} className={`${styles.logLine} ${getLogClass(line)}`}>
                 {line}
               </div>
             ))}

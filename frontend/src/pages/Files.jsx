@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, ArrowLeft, ArrowRight } from 'lucide-react'
+import styles from './Files.module.css'
 
 function Files() {
   const [files, setFiles] = useState([])
@@ -31,25 +32,25 @@ function Files() {
   const totalPages = Math.ceil(total / limit)
 
   return (
-    <div className="container">
-      <div className="files-header">
+    <div className={styles.page}>
+      <div className={styles.header}>
         <h1>Ingested Files ({total.toLocaleString()})</h1>
       </div>
 
       {loading ? (
-        <div>Loading...</div>
+        <div className={styles.loading}>Loading...</div>
       ) : (
-        <div className="files-list">
+        <div className={styles.list}>
           {files.map(file => (
-            <div key={file.id} className="file-item">
-              <FileText size={20} />
-              <div className="file-item-content">
+            <div key={file.id} className={styles.item}>
+              <FileText size={20} className={styles.itemIcon} />
+              <div className={styles.itemContent}>
                 <Link to={`/document/${file.id}`}>
                   {file.filename}
                 </Link>
                 <small>{file.path}</small>
               </div>
-              <span className="file-date">
+              <span className={styles.itemDate}>
                 {new Date(file.created_at).toLocaleDateString()}
               </span>
             </div>
@@ -57,7 +58,7 @@ function Files() {
         </div>
       )}
 
-      <div className="pagination">
+      <div className={styles.pagination}>
         <button 
           onClick={() => setPage(p => Math.max(1, p - 1))}
           disabled={page === 1}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Search, BookOpen, FileText, Server } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import styles from './Home.module.css'
 
 function Home() {
   const [query, setQuery] = useState('')
@@ -53,25 +54,26 @@ function Home() {
   }
 
   return (
-    <div className="container">
-      <h1>
-        <BookOpen style={{ verticalAlign: 'middle', marginRight: '10px' }} />
+    <div className={styles.page}>
+      <h1 className={styles.title}>
+        <BookOpen />
         Archive Brain
       </h1>
       
-      <form className="search-box" onSubmit={handleSearch}>
+      <form className={styles.searchForm} onSubmit={handleSearch}>
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Ask your archive a question..."
+          className={styles.searchInput}
         />
         
         {status && status.ollama.available_models && (
           <select 
             value={selectedModel} 
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="model-select"
+            className={styles.modelSelect}
             title="Select Chat Model"
           >
             {status.ollama.available_models.map(model => (
@@ -80,25 +82,25 @@ function Home() {
           </select>
         )}
 
-        <button type="submit" disabled={loading}>
+        <button type="submit" disabled={loading} className={styles.searchButton}>
           {loading ? 'Thinking...' : <Search size={20} />}
         </button>
       </form>
 
       {result && (
-        <div className="result-card">
+        <div className={styles.resultCard}>
           <h3>Answer</h3>
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+          <div className={styles.answer}>
             {result.answer}
           </div>
 
           {result.sources && result.sources.length > 0 && (
-            <div className="sources">
+            <div className={styles.sources}>
               <h4>Sources</h4>
               {result.sources.map((source, index) => (
-                <div key={index} className="source-item">
-                  <FileText size={16} style={{ verticalAlign: 'middle', marginRight: '5px' }} />
-                  <strong>
+                <div key={index} className={styles.sourceItem}>
+                  <span className={styles.sourceLink}>
+                    <FileText size={16} />
                     {source.file_id ? (
                       <a 
                         href={`/document/${source.file_id}`}
@@ -106,16 +108,14 @@ function Home() {
                             e.preventDefault();
                             navigate(`/document/${source.file_id}`);
                         }}
-                        className="source-link"
                       >
                         {source.title || 'Untitled'}
                       </a>
                     ) : (
                       source.title || 'Untitled'
                     )}
-                  </strong>
-                  <br />
-                  <small style={{ marginLeft: '24px' }}>{source.path}</small>
+                  </span>
+                  <small className={styles.sourcePath}>{source.path}</small>
                 </div>
               ))}
             </div>
@@ -124,19 +124,19 @@ function Home() {
       )}
 
       {status && (
-        <footer className="status-footer">
-          <div className="status-group">
+        <footer className={styles.statusFooter}>
+          <div className={styles.statusGroup}>
             <Server size={14} />
-            <span className={`status-indicator ${status.ollama.status}`}></span>
+            <span className={`${styles.statusIndicator} ${status.ollama.status === 'online' ? styles.online : ''}`}></span>
             <span>Ollama</span>
           </div>
-          <div className="status-group">
-            <span className="status-label">Chat:</span>
-            <span className="status-value">{selectedModel || status.ollama.chat_model}</span>
+          <div className={styles.statusGroup}>
+            <span className={styles.statusLabel}>Chat:</span>
+            <span className={styles.statusValue}>{selectedModel || status.ollama.chat_model}</span>
           </div>
-          <div className="status-group">
-            <span className="status-label">Embed:</span>
-            <span className="status-value">{status.ollama.embedding_model}</span>
+          <div className={styles.statusGroup}>
+            <span className={styles.statusLabel}>Embed:</span>
+            <span className={styles.statusValue}>{status.ollama.embedding_model}</span>
           </div>
         </footer>
       )}
