@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, Play, Pause, Power } from 'lucide-react'
+import { Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, Play, Pause, Power, RefreshCw, CheckCircle, FilePlus, FileEdit, FileX } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 function Dashboard() {
   const [metrics, setMetrics] = useState(null)
   const [workerState, setWorkerState] = useState(null)
+  const [ingestProgress, setIngestProgress] = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
 
@@ -25,6 +26,16 @@ function Dashboard() {
       const res = await fetch('/api/worker/state')
       const data = await res.json()
       setWorkerState(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const fetchIngestProgress = async () => {
+    try {
+      const res = await fetch('/api/worker/progress')
+      const data = await res.json()
+      setIngestProgress(data)
     } catch (err) {
       console.error(err)
     }
@@ -59,11 +70,14 @@ function Dashboard() {
   useEffect(() => {
     fetchMetrics()
     fetchWorkerState()
+    fetchIngestProgress()
     const metricsInterval = setInterval(fetchMetrics, 2000)
     const stateInterval = setInterval(fetchWorkerState, 5000)
+    const progressInterval = setInterval(fetchIngestProgress, 1000)
     return () => {
       clearInterval(metricsInterval)
       clearInterval(stateInterval)
+      clearInterval(progressInterval)
     }
   }, [])
 
@@ -141,6 +155,62 @@ function Dashboard() {
               <span className="control-status">{workerState.embed ? 'ON' : 'OFF'}</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Ingest Progress */}
+      {ingestProgress && ingestProgress.phase !== 'idle' && (
+        <div className="dashboard-section progress-section">
+          <div className="progress-header">
+            <h2>
+              {ingestProgress.phase === 'counting' && <><RefreshCw size={18} className="spin" /> Counting Files...</>}
+              {ingestProgress.phase === 'scanning' && <><RefreshCw size={18} className="spin" /> Scanning Files</>}
+              {ingestProgress.phase === 'complete' && <><CheckCircle size={18} color="#42b883" /> Scan Complete</>}
+            </h2>
+            {ingestProgress.phase === 'scanning' && (
+              <span className="progress-pct">{ingestProgress.percent}%</span>
+            )}
+          </div>
+          
+          {ingestProgress.total > 0 && (
+            <>
+              <div className="progress-bar large">
+                <div 
+                  className="progress-fill" 
+                  style={{ 
+                    width: `${ingestProgress.percent}%`, 
+                    backgroundColor: ingestProgress.phase === 'complete' ? '#42b883' : '#646cff' 
+                  }}
+                ></div>
+              </div>
+              
+              <div className="progress-details">
+                <span className="progress-count">
+                  {ingestProgress.current.toLocaleString()} / {ingestProgress.total.toLocaleString()} files
+                </span>
+                {ingestProgress.current_file && (
+                  <span className="progress-current" title={ingestProgress.current_file}>
+                    {ingestProgress.current_file}
+                  </span>
+                )}
+              </div>
+              
+              <div className="progress-stats">
+                <div className="stat-item new">
+                  <FilePlus size={14} />
+                  <span>{ingestProgress.new_files.toLocaleString()} new</span>
+                </div>
+                <div className="stat-item updated">
+                  <FileEdit size={14} />
+                  <span>{ingestProgress.updated_files.toLocaleString()} updated</span>
+                </div>
+                <div className="stat-item skipped">
+                  <FileX size={14} />
+                  <span>{ingestProgress.skipped_files.toLocaleString()} unchanged</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
       

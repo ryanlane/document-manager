@@ -4,6 +4,27 @@ import sys
 import os
 import json
 
+# Shared paths - must be set before logging config
+SHARED_DIR = "/app/shared"
+STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
+LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
+
+# Ensure shared directory exists
+os.makedirs(SHARED_DIR, exist_ok=True)
+
+# Configure root logger BEFORE imports so ALL modules inherit this config
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+logging.basicConfig(
+    level=logging.INFO,
+    format=log_format,
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE)
+    ],
+    force=True  # Override any existing config from imported modules
+)
+logger = logging.getLogger("worker_loop")
+
 # Ensure we can import from src
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,25 +33,14 @@ from src.segment.segment_entries import main as segment_main
 from src.enrich.enrich_entries import main as enrich_main
 from src.rag.embed_entries import main as embed_main
 
-# Shared paths
-SHARED_DIR = "/app/shared"
-STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
-LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
-
-# Ensure shared directory exists
-os.makedirs(SHARED_DIR, exist_ok=True)
-
-# Configure root logger so ALL modules write to both stdout and file
-log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-logging.basicConfig(
-    level=logging.INFO,
-    format=log_format,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_FILE)
-    ]
-)
-logger = logging.getLogger("worker_loop")
+# Re-apply file handler to root logger AFTER imports (child modules may have altered config)
+root_logger = logging.getLogger()
+# Remove any duplicate handlers and ensure our file handler is attached
+file_handler_exists = any(isinstance(h, logging.FileHandler) and h.baseFilename == LOG_FILE for h in root_logger.handlers)
+if not file_handler_exists:
+    fh = logging.FileHandler(LOG_FILE)
+    fh.setFormatter(logging.Formatter(log_format))
+    root_logger.addHandler(fh)
 
 def get_state():
     """Read the current worker state from file."""

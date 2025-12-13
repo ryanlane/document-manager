@@ -39,12 +39,12 @@ A personal document archive assistant that ingests, segments, enriches, and allo
 
     *   **Step 1: Ingest Files** (Scans folders, computes hashes, stores raw text)
         ```bash
-        docker compose exec worker python -m src.ingest.ingest_files
+        docker compose exec -d worker python -m src.ingest.ingest_files
         ```
 
     *   **Step 2: Segment** (Splits files into logical chunks)
         ```bash
-        docker compose exec worker python -m src.segment.segment_entries
+        docker compose exec -d worker python -m src.segment.segment_entries
         ```
 
     *   **Step 3: Enrich** (Uses Ollama to generate titles, summaries, tags)
@@ -55,7 +55,7 @@ A personal document archive assistant that ingests, segments, enriches, and allo
 
     *   **Step 4: Embed** (Generates vector embeddings for search)
         ```bash
-        docker compose exec worker python -m src.rag.embed_entries
+        docker compose exec -d worker python -m src.rag.embed_entries
         ```
 
 3.  **Monitor Progress**:

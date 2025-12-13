@@ -2,6 +2,8 @@ import argparse
 import hashlib
 import logging
 import os
+import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Set
@@ -15,6 +17,30 @@ from src.db.session import get_db
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Progress tracking
+SHARED_DIR = os.environ.get("SHARED_DIR", "/app/shared")
+PROGRESS_FILE = os.path.join(SHARED_DIR, "ingest_progress.json")
+
+def update_progress(phase: str, current: int, total: int, new_files: int = 0, updated_files: int = 0, skipped_files: int = 0, current_file: str = ""):
+    """Update the progress file for the dashboard."""
+    try:
+        progress = {
+            "phase": phase,
+            "current": current,
+            "total": total,
+            "percent": round((current / total) * 100, 1) if total > 0 else 0,
+            "new_files": new_files,
+            "updated_files": updated_files,
+            "skipped_files": skipped_files,
+            "current_file": current_file,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        os.makedirs(SHARED_DIR, exist_ok=True)
+        with open(PROGRESS_FILE, 'w') as f:
+            json.dump(progress, f)
+    except Exception as e:
+        logger.debug(f"Could not update progress: {e}")
 
 def compute_sha256(file_path: Path) -> str:
     sha256_hash = hashlib.sha256()
@@ -45,7 +71,10 @@ def should_process(file_path: Path, include_exts: Set[str], exclude_patterns: Li
             
     return True
 
-def ingest_file(db: Session, file_path: Path, dry_run: bool = False):
+def ingest_file(db: Session, file_path: Path, dry_run: bool = False) -> str:
+    """
+    Ingest a single file. Returns operation type: 'new', 'updated', 'skipped', or 'error'.
+    """
     try:
         stat = file_path.stat()
         mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
@@ -145,11 +174,11 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False):
         if existing:
             if existing.mtime == mtime and existing.path == str(file_path):
                 logger.debug(f"Skipping {file_path} (unchanged)")
-                return
+                return "skipped"
             
             if dry_run:
                 logger.info(f"[DRY RUN] Would update {file_path} (SHA match)")
-                return
+                return "skipped"
 
             # Update existing record
             existing.path = str(file_path)
@@ -159,6 +188,8 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False):
             existing.mtime = mtime
             # raw_text is same since sha256 is same
             logger.info(f"Updated metadata for {file_path} (SHA match)")
+            db.commit()
+            return "updated"
         else:
             # New content
             raw_text = extract_text(file_path, extension)
@@ -171,7 +202,7 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False):
             
             if dry_run:
                 logger.info(f"[DRY RUN] Would insert {file_path}")
-                return
+                return "skipped"
 
             new_file = RawFile(
                 path=str(file_path),
@@ -185,12 +216,13 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False):
             )
             db.add(new_file)
             logger.info(f"Ingested {file_path}")
-            
-        db.commit()
+            db.commit()
+            return "new"
 
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")
         db.rollback()
+        return "error"
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest files into the archive")
@@ -205,7 +237,10 @@ def main():
     
     db = next(get_db())
     
-    count = 0
+    # Phase 1: Count files to process
+    update_progress("counting", 0, 0)
+    logger.info("Counting files to process...")
+    files_to_process = []
     for root in include_paths:
         if not root.exists():
             logger.warning(f"Source root {root} does not exist")
@@ -216,11 +251,56 @@ def main():
                 continue
                 
             if should_process(file_path, include_exts, exclude_patterns):
-                ingest_file(db, file_path, dry_run=args.dry_run)
-                count += 1
-                if args.limit and count >= args.limit:
-                    logger.info(f"Reached limit of {args.limit} files")
-                    return
+                files_to_process.append(file_path)
+                if args.limit and len(files_to_process) >= args.limit:
+                    break
+        if args.limit and len(files_to_process) >= args.limit:
+            break
+    
+    total = len(files_to_process)
+    logger.info(f"Found {total} files to process")
+    
+    # Phase 2: Process files with progress tracking
+    new_files = 0
+    updated_files = 0
+    skipped_files = 0
+    errors = 0
+    
+    for i, file_path in enumerate(files_to_process):
+        result = ingest_file(db, file_path, dry_run=args.dry_run)
+        
+        if result == "new":
+            new_files += 1
+        elif result == "updated":
+            updated_files += 1
+        elif result == "skipped":
+            skipped_files += 1
+        elif result == "error":
+            errors += 1
+        
+        # Update progress every 10 files or at key milestones
+        if i % 10 == 0 or i == total - 1:
+            update_progress(
+                phase="scanning",
+                current=i + 1,
+                total=total,
+                new_files=new_files,
+                updated_files=updated_files,
+                skipped_files=skipped_files,
+                current_file=str(file_path.name)[:50]
+            )
+    
+    # Mark as complete
+    update_progress(
+        phase="complete",
+        current=total,
+        total=total,
+        new_files=new_files,
+        updated_files=updated_files,
+        skipped_files=skipped_files,
+        current_file=""
+    )
+    logger.info(f"Ingest complete: {new_files} new, {updated_files} updated, {skipped_files} skipped, {errors} errors")
 
 if __name__ == "__main__":
     main()

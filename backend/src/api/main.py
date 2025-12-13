@@ -18,6 +18,7 @@ app = FastAPI(title="Archive Brain API")
 SHARED_DIR = "/app/shared"
 WORKER_STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 WORKER_LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
+INGEST_PROGRESS_FILE = os.path.join(SHARED_DIR, "ingest_progress.json")
 
 class AskRequest(BaseModel):
     query: str
@@ -108,6 +109,28 @@ def get_worker_logs(lines: int = 100):
         with open(WORKER_LOG_FILE, 'r') as f:
             all_lines = f.readlines()
             return {"lines": all_lines[-lines:]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/worker/progress")
+def get_worker_progress():
+    """Get the current ingest progress."""
+    try:
+        if not os.path.exists(INGEST_PROGRESS_FILE):
+            return {
+                "phase": "idle",
+                "current": 0,
+                "total": 0,
+                "percent": 0,
+                "new_files": 0,
+                "updated_files": 0,
+                "skipped_files": 0,
+                "current_file": "",
+                "updated_at": None
+            }
+        
+        with open(INGEST_PROGRESS_FILE, 'r') as f:
+            return json.load(f)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
