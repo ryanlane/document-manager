@@ -11,6 +11,14 @@ services:
       - "5432:5432"
     networks:
       - archive_net
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 1G
 
   tika:
     image: apache/tika:latest
@@ -18,6 +26,14 @@ services:
       - "9998:9998"
     networks:
       - archive_net
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 512M
 
   worker:
     build: ./backend
@@ -27,6 +43,7 @@ services:
       # Mount the data directories here so the worker can access them
       - ./archive_root:/data/archive
       - /mnt/mediaboy/story:/data/archive/story
+      - worker_shared:/app/shared
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -46,6 +63,15 @@ services:
       - archive_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Resource allocation - worker gets most resources for heavy processing
+    deploy:
+      resources:
+        limits:
+          cpus: '8'
+          memory: 16G
+        reservations:
+          cpus: '2'
+          memory: 2G
 
   api:
     build: ./backend
@@ -57,6 +83,7 @@ services:
       - ./archive_root:/data/archive
       # Mount the network drive (ensure this path exists and is mounted in WSL)
       - /mnt/mediaboy/story:/data/archive/story
+      - worker_shared:/app/shared
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -74,6 +101,14 @@ services:
       - archive_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
 
   frontend:
     build: ./frontend
@@ -89,6 +124,7 @@ services:
 
 volumes:
   postgres_data:
+  worker_shared:
 
 networks:
   archive_net:

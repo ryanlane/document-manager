@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle } from 'lucide-react'
+import { Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, Play, Pause, Power } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 function Dashboard() {
   const [metrics, setMetrics] = useState(null)
+  const [workerState, setWorkerState] = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
 
@@ -19,10 +20,51 @@ function Dashboard() {
     }
   }
 
+  const fetchWorkerState = async () => {
+    try {
+      const res = await fetch('/api/worker/state')
+      const data = await res.json()
+      setWorkerState(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const updateWorkerState = async (updates) => {
+    try {
+      const res = await fetch('/api/worker/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+      const data = await res.json()
+      setWorkerState(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const toggleProcess = (process) => {
+    if (workerState) {
+      updateWorkerState({ [process]: !workerState[process] })
+    }
+  }
+
+  const toggleAllProcesses = () => {
+    if (workerState) {
+      updateWorkerState({ running: !workerState.running })
+    }
+  }
+
   useEffect(() => {
     fetchMetrics()
-    const interval = setInterval(fetchMetrics, 2000) // Poll every 2 seconds
-    return () => clearInterval(interval)
+    fetchWorkerState()
+    const metricsInterval = setInterval(fetchMetrics, 2000)
+    const stateInterval = setInterval(fetchWorkerState, 5000)
+    return () => {
+      clearInterval(metricsInterval)
+      clearInterval(stateInterval)
+    }
   }, [])
 
   const formatBytes = (bytes) => {
@@ -47,6 +89,60 @@ function Dashboard() {
           </span>
         )}
       </div>
+
+      {/* Worker Controls */}
+      {workerState && (
+        <div className="dashboard-section controls-section">
+          <div className="controls-header">
+            <h2>Pipeline Controls</h2>
+            <button 
+              className={`master-toggle ${workerState.running ? 'running' : 'paused'}`}
+              onClick={toggleAllProcesses}
+            >
+              {workerState.running ? <Pause size={18} /> : <Play size={18} />}
+              {workerState.running ? 'Pause All' : 'Resume All'}
+            </button>
+          </div>
+          <div className="controls-grid">
+            <button 
+              className={`control-btn ${workerState.ingest ? 'active' : ''}`}
+              onClick={() => toggleProcess('ingest')}
+              disabled={!workerState.running}
+            >
+              <Power size={16} />
+              <span>Ingest</span>
+              <span className="control-status">{workerState.ingest ? 'ON' : 'OFF'}</span>
+            </button>
+            <button 
+              className={`control-btn ${workerState.segment ? 'active' : ''}`}
+              onClick={() => toggleProcess('segment')}
+              disabled={!workerState.running}
+            >
+              <Power size={16} />
+              <span>Segment</span>
+              <span className="control-status">{workerState.segment ? 'ON' : 'OFF'}</span>
+            </button>
+            <button 
+              className={`control-btn ${workerState.enrich ? 'active' : ''}`}
+              onClick={() => toggleProcess('enrich')}
+              disabled={!workerState.running}
+            >
+              <Power size={16} />
+              <span>Enrich</span>
+              <span className="control-status">{workerState.enrich ? 'ON' : 'OFF'}</span>
+            </button>
+            <button 
+              className={`control-btn ${workerState.embed ? 'active' : ''}`}
+              onClick={() => toggleProcess('embed')}
+              disabled={!workerState.running}
+            >
+              <Power size={16} />
+              <span>Embed</span>
+              <span className="control-status">{workerState.embed ? 'ON' : 'OFF'}</span>
+            </button>
+          </div>
+        </div>
+      )}
       
       <div className="metrics-grid">
         <div className="metric-card">

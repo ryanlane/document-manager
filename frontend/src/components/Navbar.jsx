@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, FileText, Activity, Menu, X } from 'lucide-react'
+import { Home, FileText, Activity, Menu, X, ScrollText } from 'lucide-react'
 import { useState } from 'react'
 
 function Navbar() {
@@ -29,6 +29,9 @@ function Navbar() {
         </Link>
         <Link to="/dashboard" className={isActive('/dashboard')} onClick={() => setIsOpen(false)}>
           <Activity size={18} /> Dashboard
+        </Link>
+        <Link to="/logs" className={isActive('/logs')} onClick={() => setIsOpen(false)}>
+          <ScrollText size={18} /> Logs
         </Link>
       </div>
     </nav>

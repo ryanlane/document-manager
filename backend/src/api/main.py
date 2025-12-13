@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import os
+import json
 
 from src.db.session import get_db
 from src.db.models import RawFile, Entry
@@ -12,6 +13,11 @@ from src.llm_client import generate_text, list_models, OLLAMA_URL, MODEL, EMBEDD
 import requests
 
 app = FastAPI(title="Archive Brain API")
+
+# Worker state file (shared with worker_loop.py)
+SHARED_DIR = "/app/shared"
+WORKER_STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
+WORKER_LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
 
 class AskRequest(BaseModel):
     query: str
@@ -29,9 +35,81 @@ class FileDetail(BaseModel):
     path: str
     raw_text: str
 
+class WorkerStateUpdate(BaseModel):
+    ingest: Optional[bool] = None
+    segment: Optional[bool] = None
+    enrich: Optional[bool] = None
+    embed: Optional[bool] = None
+    running: Optional[bool] = None
+
+def get_worker_state():
+    """Read the current worker state."""
+    default_state = {
+        "ingest": True,
+        "segment": True,
+        "enrich": True,
+        "embed": True,
+        "running": True
+    }
+    try:
+        if os.path.exists(WORKER_STATE_FILE):
+            with open(WORKER_STATE_FILE, 'r') as f:
+                return {**default_state, **json.load(f)}
+    except Exception:
+        pass
+    return default_state
+
+def save_worker_state(state):
+    """Save the worker state."""
+    try:
+        with open(WORKER_STATE_FILE, 'w') as f:
+            json.dump(state, f)
+        return True
+    except Exception:
+        return False
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/worker/state")
+def get_worker_state_endpoint():
+    """Get current worker process states."""
+    return get_worker_state()
+
+@app.post("/worker/state")
+def update_worker_state(update: WorkerStateUpdate):
+    """Update worker process states."""
+    current = get_worker_state()
+    
+    if update.ingest is not None:
+        current["ingest"] = update.ingest
+    if update.segment is not None:
+        current["segment"] = update.segment
+    if update.enrich is not None:
+        current["enrich"] = update.enrich
+    if update.embed is not None:
+        current["embed"] = update.embed
+    if update.running is not None:
+        current["running"] = update.running
+    
+    if save_worker_state(current):
+        return current
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save worker state")
+
+@app.get("/worker/logs")
+def get_worker_logs(lines: int = 100):
+    """Get the last N lines from the worker log file."""
+    try:
+        if not os.path.exists(WORKER_LOG_FILE):
+            return {"lines": [], "message": "Log file not found. Worker may need to be restarted."}
+        
+        with open(WORKER_LOG_FILE, 'r') as f:
+            all_lines = f.readlines()
+            return {"lines": all_lines[-lines:]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/system/status")
 def get_system_status():
