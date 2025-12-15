@@ -154,25 +154,33 @@
 
 ## 🟢 Lower Priority (Nice to Have)
 
-### 11. Parallel Worker Processes
-- [ ] Use multiprocessing for enrichment
-- [ ] Consider async workers
-- **Files**: `backend/src/worker_loop.py`
-
-### 12. Quality Scoring
-- [ ] Add confidence score from LLM
-- [ ] Flag low-quality entries for review
+### 11. Parallel Worker Processes ✅
+- [x] Use ThreadPoolExecutor for parallel enrichment (3 workers)
+- [x] Batch size of 15 entries per cycle
+- [x] Thread-safe database sessions per worker
 - **Files**: `backend/src/enrich/enrich_entries.py`
 
-### 13. Full-Text Search Hybrid
-- [ ] Combine BM25 (search_vector) with vector similarity
-- [ ] Weighted scoring system
-- **Files**: `backend/src/rag/search.py`
+### 12. Quality Scoring ✅
+- [x] Add confidence score calculation (0-1 scale)
+- [x] Score based on: title quality, summary length, tag relevance, metadata completeness
+- [x] Flag low-quality entries (< 0.4) for review
+- [x] Store in `extra_meta.quality_score` and `extra_meta.needs_review`
+- [x] API endpoints: `/entries/needs-review`, `/entries/quality-stats`
+- **Files**: `backend/src/enrich/enrich_entries.py`, `backend/src/api/main.py`
 
-### 14. Document Collections/Series
-- [ ] Group entries from same file
-- [ ] Series detection from filenames
-- **Files**: `backend/src/db/models.py`
+### 13. Full-Text Search Hybrid ✅
+- [x] Three search modes: 'vector', 'keyword', 'hybrid'
+- [x] Combine BM25 (search_vector) with vector cosine similarity
+- [x] Configurable weights (default: 70% vector, 30% keyword)
+- [x] API parameter: `search_mode` and `vector_weight`
+- **Files**: `backend/src/rag/search.py`, `backend/src/api/main.py`
+
+### 14. Document Collections/Series ✅
+- [x] Detect series from filename patterns (e.g., "Story Chapter 5", "Book Part 2")
+- [x] Store `series_name`, `series_number`, `series_total` on RawFile
+- [x] API endpoints: `/series`, `/series/{name}`, `/files/{id}/series`
+- **Files**: `backend/src/db/models.py`, `backend/src/ingest/ingest_files.py`, `backend/src/api/main.py`
+- **Migration**: `backend/migrations/004_add_series_columns.sql`
 
 ---
 

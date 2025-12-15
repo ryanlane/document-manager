@@ -2,13 +2,15 @@ import logging
 import json
 import os
 import yaml
+import re
 from datetime import datetime
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 
-from src.db.session import get_db
+from src.db.session import get_db, SessionLocal
 from src.db.models import Entry
 from src.llm_client import generate_json
 
@@ -79,6 +81,10 @@ def update_search_vector(db: Session, entry_id: int):
 # Max retry attempts before marking as error
 MAX_RETRIES = 3
 
+# Parallel processing settings
+ENRICH_WORKERS = 3  # Number of parallel enrichment workers
+ENRICH_BATCH_SIZE = 15  # Entries to process per batch
+
 # Known category folders to detect
 CATEGORY_FOLDERS = ['scifi', 'sci-fi', 'fantasy', 'romance', 'horror', 'mystery', 
                     'thriller', 'drama', 'comedy', 'adventure', 'historical', 
@@ -102,6 +108,72 @@ def extract_category_from_path(path: str) -> str:
                 return candidate.title()
     
     return None
+
+
+def calculate_quality_score(entry_text: str, metadata: dict) -> float:
+    """
+    Calculate a quality score (0-1) for the enrichment based on:
+    - Completeness of metadata fields
+    - Length and quality of summary
+    - Tag relevance
+    - Title quality
+    """
+    score = 0.0
+    max_score = 0.0
+    
+    # Title quality (0-20 points)
+    max_score += 20
+    title = metadata.get('title', '')
+    if title:
+        score += 5  # Has title
+        if len(title) > 10:
+            score += 5  # Reasonable length
+        if len(title) < 100:
+            score += 5  # Not too long
+        if not title.lower().startswith('untitled'):
+            score += 5  # Not generic
+    
+    # Summary quality (0-30 points)
+    max_score += 30
+    summary = metadata.get('summary', '')
+    if summary:
+        score += 10  # Has summary
+        word_count = len(summary.split())
+        if word_count >= 20:
+            score += 10  # Good length
+        if word_count <= 100:
+            score += 5  # Not too verbose
+        # Check if summary seems relevant (contains some words from text)
+        text_words = set(entry_text.lower().split()[:100])
+        summary_words = set(summary.lower().split())
+        overlap = len(text_words & summary_words)
+        if overlap > 5:
+            score += 5  # Some relevance
+    
+    # Tags quality (0-25 points)
+    max_score += 25
+    tags = metadata.get('tags', [])
+    if tags and len(tags) > 0:
+        score += 10  # Has tags
+        if 2 <= len(tags) <= 7:
+            score += 10  # Good number of tags
+        # Check tag quality (not too generic)
+        generic_tags = {'text', 'document', 'content', 'file', 'data', 'unknown'}
+        quality_tags = [t for t in tags if t.lower() not in generic_tags]
+        if len(quality_tags) >= 2:
+            score += 5
+    
+    # Author detection (0-15 points)
+    max_score += 15
+    if metadata.get('author'):
+        score += 15
+    
+    # Date detection (0-10 points)
+    max_score += 10
+    if metadata.get('created_hint'):
+        score += 10
+    
+    return round(score / max_score, 2) if max_score > 0 else 0.0
 
 
 def enrich_entry(db: Session, entry: Entry):
@@ -172,6 +244,17 @@ def enrich_entry(db: Session, entry: Entry):
         
         entry.status = 'enriched'
         
+        # Calculate quality score
+        quality_score = calculate_quality_score(entry.entry_text, metadata)
+        if entry.extra_meta is None:
+            entry.extra_meta = {}
+        entry.extra_meta['quality_score'] = quality_score
+        
+        # Flag low quality entries for review
+        if quality_score < 0.4:
+            entry.extra_meta['needs_review'] = True
+            logger.warning(f"Entry {entry.id} has low quality score: {quality_score}")
+        
         # Clear existing embedding to force re-embedding with new metadata
         entry.embedding = None
         
@@ -204,6 +287,26 @@ def update_progress(current: int, total: int, entry_title: str = ""):
     except Exception as e:
         logger.warning(f"Failed to update progress: {e}")
 
+def enrich_entry_worker(entry_id: int) -> tuple:
+    """
+    Worker function for parallel enrichment.
+    Creates its own database session for thread safety.
+    Returns (entry_id, success, error_message)
+    """
+    db = SessionLocal()
+    try:
+        entry = db.query(Entry).filter(Entry.id == entry_id).first()
+        if entry:
+            enrich_entry(db, entry)
+            return (entry_id, True, None)
+        return (entry_id, False, "Entry not found")
+    except Exception as e:
+        logger.error(f"Worker error for entry {entry_id}: {e}")
+        return (entry_id, False, str(e))
+    finally:
+        db.close()
+
+
 def main():
     db = next(get_db())
     
@@ -218,7 +321,7 @@ def main():
     entries = db.query(Entry).filter(
         Entry.status == 'pending',
         or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
-    ).limit(10).all()
+    ).limit(ENRICH_BATCH_SIZE).all()
     
     if not entries:
         logger.info("No pending entries found.")
@@ -226,9 +329,27 @@ def main():
         update_progress(0, 0, "")
         return
 
-    for i, entry in enumerate(entries):
-        update_progress(i + 1, total_pending, entry.title or f"Entry {entry.id}")
-        enrich_entry(db, entry)
+    # Get entry IDs for parallel processing
+    entry_ids = [e.id for e in entries]
+    
+    # Use ThreadPoolExecutor for parallel enrichment
+    completed = 0
+    with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as executor:
+        futures = {executor.submit(enrich_entry_worker, eid): eid for eid in entry_ids}
+        
+        for future in as_completed(futures):
+            entry_id = futures[future]
+            try:
+                eid, success, error = future.result()
+                completed += 1
+                if success:
+                    update_progress(completed, total_pending, f"Entry {eid}")
+                else:
+                    logger.warning(f"Entry {eid} failed: {error}")
+            except Exception as e:
+                logger.error(f"Future error for entry {entry_id}: {e}")
+    
+    logger.info(f"Batch complete: processed {completed}/{len(entry_ids)} entries")
 
 if __name__ == "__main__":
     main()

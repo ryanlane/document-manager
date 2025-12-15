@@ -9,7 +9,7 @@ import json
 
 from src.db.session import get_db
 from src.db.models import RawFile, Entry, DocumentLink
-from src.rag.search import search_entries_semantic
+from src.rag.search import search_entries_semantic, SEARCH_MODE_VECTOR, SEARCH_MODE_KEYWORD, SEARCH_MODE_HYBRID
 from src.llm_client import generate_text, list_models, OLLAMA_URL, MODEL, EMBEDDING_MODEL
 import requests
 
@@ -28,6 +28,8 @@ class AskRequest(BaseModel):
     k: int = 5
     model: Optional[str] = None
     filters: Optional[dict] = None
+    search_mode: Optional[str] = 'hybrid'  # 'vector', 'keyword', or 'hybrid'
+    vector_weight: Optional[float] = 0.7  # Weight for vector vs keyword in hybrid mode
 
 class AskResponse(BaseModel):
     answer: str
@@ -248,8 +250,18 @@ def get_file_details(file_id: int, db: Session = Depends(get_db)):
 
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest, db: Session = Depends(get_db)):
-    # 1. Search
-    results = search_entries_semantic(db, request.query, k=request.k, filters=request.filters)
+    # 1. Search with configurable mode
+    search_mode = request.search_mode or 'hybrid'
+    vector_weight = request.vector_weight or 0.7
+    
+    results = search_entries_semantic(
+        db, 
+        request.query, 
+        k=request.k, 
+        filters=request.filters,
+        mode=search_mode,
+        vector_weight=vector_weight
+    )
     
     if not results:
         return AskResponse(answer="I couldn't find any relevant documents in the archive.", sources=[])
@@ -562,4 +574,150 @@ def get_link_stats(db: Session = Depends(get_db)):
         "unique_domains": unique_domains,
         "top_domains": [{"domain": d.domain, "count": d.count} for d in top_domains],
         "link_types": {lt.link_type: lt.count for lt in link_types}
+    }
+
+# ============================================================================
+# Quality Review & Low-Quality Entries
+# ============================================================================
+
+@app.get("/entries/needs-review")
+def get_entries_needing_review(limit: int = 50, db: Session = Depends(get_db)):
+    """Get entries flagged as needing review due to low quality scores."""
+    from sqlalchemy import cast
+    from sqlalchemy.dialects.postgresql import JSONB
+    
+    entries = db.query(Entry).filter(
+        Entry.extra_meta['needs_review'].astext == 'true'
+    ).limit(limit).all()
+    
+    return {
+        "count": len(entries),
+        "entries": [
+            {
+                "id": e.id,
+                "title": e.title,
+                "summary": e.summary,
+                "quality_score": e.extra_meta.get('quality_score') if e.extra_meta else None,
+                "file_path": e.raw_file.path if e.raw_file else None
+            }
+            for e in entries
+        ]
+    }
+
+@app.get("/entries/quality-stats")
+def get_quality_stats(db: Session = Depends(get_db)):
+    """Get quality score distribution statistics."""
+    from sqlalchemy import text
+    
+    # Use raw SQL for JSON field aggregation
+    sql = text("""
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN (extra_meta->>'quality_score')::float >= 0.8 THEN 1 END) as excellent,
+            COUNT(CASE WHEN (extra_meta->>'quality_score')::float >= 0.6 AND (extra_meta->>'quality_score')::float < 0.8 THEN 1 END) as good,
+            COUNT(CASE WHEN (extra_meta->>'quality_score')::float >= 0.4 AND (extra_meta->>'quality_score')::float < 0.6 THEN 1 END) as fair,
+            COUNT(CASE WHEN (extra_meta->>'quality_score')::float < 0.4 THEN 1 END) as poor,
+            COUNT(CASE WHEN extra_meta->>'needs_review' = 'true' THEN 1 END) as needs_review,
+            AVG((extra_meta->>'quality_score')::float) as avg_score
+        FROM entries
+        WHERE extra_meta->>'quality_score' IS NOT NULL
+    """)
+    
+    result = db.execute(sql).fetchone()
+    
+    return {
+        "total_scored": result[0],
+        "excellent": result[1],  # >= 0.8
+        "good": result[2],       # 0.6-0.8
+        "fair": result[3],       # 0.4-0.6
+        "poor": result[4],       # < 0.4
+        "needs_review": result[5],
+        "average_score": round(float(result[6]), 2) if result[6] else None
+    }
+
+# ============================================================================
+# Document Series & Collections
+# ============================================================================
+
+@app.get("/series")
+def get_all_series(limit: int = 50, db: Session = Depends(get_db)):
+    """Get all detected document series."""
+    series = db.query(
+        RawFile.series_name,
+        func.count(RawFile.id).label('file_count'),
+        func.min(RawFile.series_number).label('min_part'),
+        func.max(RawFile.series_number).label('max_part')
+    ).filter(
+        RawFile.series_name.isnot(None)
+    ).group_by(RawFile.series_name).order_by(func.count(RawFile.id).desc()).limit(limit).all()
+    
+    return {
+        "series_count": len(series),
+        "series": [
+            {
+                "name": s.series_name,
+                "file_count": s.file_count,
+                "part_range": f"{s.min_part}-{s.max_part}"
+            }
+            for s in series
+        ]
+    }
+
+@app.get("/series/{series_name}")
+def get_series_files(series_name: str, db: Session = Depends(get_db)):
+    """Get all files in a specific series, ordered by part number."""
+    from urllib.parse import unquote
+    series_name = unquote(series_name)
+    
+    files = db.query(RawFile).filter(
+        RawFile.series_name == series_name
+    ).order_by(RawFile.series_number).all()
+    
+    if not files:
+        raise HTTPException(status_code=404, detail="Series not found")
+    
+    return {
+        "series_name": series_name,
+        "file_count": len(files),
+        "files": [
+            {
+                "id": f.id,
+                "filename": f.filename,
+                "part_number": f.series_number,
+                "total_parts": f.series_total,
+                "path": f.path
+            }
+            for f in files
+        ]
+    }
+
+@app.get("/files/{file_id}/series")
+def get_file_series(file_id: int, db: Session = Depends(get_db)):
+    """Get series information for a specific file and other files in the same series."""
+    file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if not file.series_name:
+        return {"file_id": file_id, "series_name": None, "related_files": []}
+    
+    # Get other files in the same series
+    related = db.query(RawFile).filter(
+        RawFile.series_name == file.series_name,
+        RawFile.id != file_id
+    ).order_by(RawFile.series_number).all()
+    
+    return {
+        "file_id": file_id,
+        "series_name": file.series_name,
+        "part_number": file.series_number,
+        "total_parts": file.series_total,
+        "related_files": [
+            {
+                "id": f.id,
+                "filename": f.filename,
+                "part_number": f.series_number
+            }
+            for f in related
+        ]
     }

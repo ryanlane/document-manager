@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
 from src.config import load_config
-from src.db.models import RawFile
+from src.db.models import RawFile, detect_series_info
 from src.db.session import get_db
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -178,6 +178,9 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
             logger.info(f"[DRY RUN] Would insert {file_path}")
             return "skipped"
 
+        # Detect series information from filename
+        series_info = detect_series_info(file_path.name)
+
         new_file = RawFile(
             path=path_str,
             filename=file_path.name,
@@ -186,10 +189,16 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
             mtime=mtime,
             sha256=sha256,
             raw_text=raw_text,
-            status=status
+            status=status,
+            series_name=series_info.get('series_name'),
+            series_number=series_info.get('series_number'),
+            series_total=series_info.get('series_total')
         )
         db.add(new_file)
-        logger.info(f"Ingested {file_path}")
+        if series_info.get('series_name'):
+            logger.info(f"Ingested {file_path} (Series: {series_info.get('series_name')} #{series_info.get('series_number')})")
+        else:
+            logger.info(f"Ingested {file_path}")
         db.commit()
         return "new"
 
