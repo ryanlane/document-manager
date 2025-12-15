@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from datetime import datetime
 from typing import List
 
@@ -53,6 +54,11 @@ def enrich_entry(db: Session, entry: Entry):
 
     try:
         entry.title = metadata.get("title")
+        
+        # Fallback to filename if title is missing
+        if not entry.title and entry.raw_file:
+            entry.title = os.path.splitext(entry.raw_file.filename)[0]
+
         entry.author = metadata.get("author")
         entry.summary = metadata.get("summary")
         entry.tags = metadata.get("tags", [])
