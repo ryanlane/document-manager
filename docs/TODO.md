@@ -103,15 +103,15 @@
 - **Files**: `backend/src/enrich/enrich_entries.py`, `backend/src/db/models.py`
 - **Migration**: `backend/migrations/001_add_category_retry_count.sql`
 
-### 4. Batch Processing for Embeddings
-- [ ] Process multiple entries in parallel
-- [ ] Consider async/threading for API calls
+### 4. Batch Processing for Embeddings ✅
+- [x] Process multiple entries in parallel (ThreadPoolExecutor with 4 workers)
+- [x] Batch size of 10 entries per iteration
 - **Files**: `backend/src/rag/embed_entries.py`
 
 ### 5. Content Type Detection for Better Parsing ✅
 - [x] Strip HTML tags properly before segmentation
-- [ ] Preserve Markdown headers as context markers
-- [ ] Handle code blocks differently
+- [x] Preserve Markdown headers as context markers
+- [x] Handle code blocks differently (extract, preserve, restore)
 - **Files**: `backend/src/segment/segment_entries.py`
 
 ---

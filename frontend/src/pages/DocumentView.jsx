@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, RefreshCw } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import styles from './DocumentView.module.css'
 
@@ -10,6 +10,7 @@ function DocumentView() {
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [reEnriching, setReEnriching] = useState(false)
 
   useEffect(() => {
     fetch(`/api/files/${id}`)
@@ -27,6 +28,19 @@ function DocumentView() {
         setLoading(false)
       })
   }, [id])
+
+  const handleReEnrich = async () => {
+    setReEnriching(true)
+    try {
+      const res = await fetch(`/api/files/${id}/re-enrich`, { method: 'POST' })
+      const data = await res.json()
+      alert(data.message || 'Queued for re-enrichment')
+    } catch (err) {
+      alert('Failed to queue for re-enrichment')
+    } finally {
+      setReEnriching(false)
+    }
+  }
 
   if (loading) return <div className={styles.loading}>Loading...</div>
   if (error) return <div className={styles.error}>Error: {error}</div>
@@ -100,6 +114,15 @@ function DocumentView() {
           <ArrowLeft size={20} /> Back
         </button>
         <h1>{file.filename}</h1>
+        <button 
+          onClick={handleReEnrich} 
+          disabled={reEnriching}
+          className={styles.reEnrichBtn}
+          title="Re-analyze this file with the LLM"
+        >
+          <RefreshCw size={16} className={reEnriching ? styles.spin : ''} />
+          {reEnriching ? 'Queuing...' : 'Re-enrich'}
+        </button>
       </div>
       <article className={styles.content}>
         {isHtml ? (

@@ -52,6 +52,106 @@ def strip_html(text: str) -> str:
         # Fallback: simple regex strip
         return re.sub(r'<[^>]+>', ' ', text)
 
+
+def extract_code_blocks(text: str) -> tuple:
+    """
+    Extract code blocks from markdown text.
+    Returns (text_with_placeholders, list_of_code_blocks)
+    """
+    code_blocks = []
+    placeholder_pattern = "<<<CODE_BLOCK_{}>>"
+    
+    # Match fenced code blocks (```...```)
+    def replace_code(match):
+        idx = len(code_blocks)
+        code_blocks.append({
+            'full': match.group(0),
+            'lang': match.group(1) or '',
+            'code': match.group(2)
+        })
+        return placeholder_pattern.format(idx)
+    
+    # Pattern for fenced code blocks
+    pattern = r'```(\w*)\n?([\s\S]*?)```'
+    text_with_placeholders = re.sub(pattern, replace_code, text)
+    
+    return text_with_placeholders, code_blocks
+
+
+def restore_code_blocks(text: str, code_blocks: list) -> str:
+    """Restore code blocks from placeholders."""
+    for i, block in enumerate(code_blocks):
+        placeholder = f"<<<CODE_BLOCK_{i}>>"
+        text = text.replace(placeholder, block['full'])
+    return text
+
+
+def extract_markdown_context(text: str) -> str:
+    """
+    Extract markdown headers to use as context prefix.
+    Returns the most recent headers (h1, h2, h3) as context.
+    """
+    headers = []
+    current_h1 = None
+    current_h2 = None
+    current_h3 = None
+    
+    for line in text.split('\n'):
+        line = line.strip()
+        if line.startswith('# '):
+            current_h1 = line[2:].strip()
+            current_h2 = None
+            current_h3 = None
+        elif line.startswith('## '):
+            current_h2 = line[3:].strip()
+            current_h3 = None
+        elif line.startswith('### '):
+            current_h3 = line[4:].strip()
+    
+    context_parts = []
+    if current_h1:
+        context_parts.append(f"# {current_h1}")
+    if current_h2:
+        context_parts.append(f"## {current_h2}")
+    if current_h3:
+        context_parts.append(f"### {current_h3}")
+    
+    return '\n'.join(context_parts)
+
+
+def find_last_headers_before(text: str, position: int) -> str:
+    """
+    Find the most recent markdown headers before a given position.
+    """
+    text_before = text[:position]
+    lines = text_before.split('\n')
+    
+    current_h1 = None
+    current_h2 = None
+    current_h3 = None
+    
+    for line in lines:
+        line_stripped = line.strip()
+        if line_stripped.startswith('# ') and not line_stripped.startswith('##'):
+            current_h1 = line_stripped
+            current_h2 = None
+            current_h3 = None
+        elif line_stripped.startswith('## ') and not line_stripped.startswith('###'):
+            current_h2 = line_stripped
+            current_h3 = None
+        elif line_stripped.startswith('### '):
+            current_h3 = line_stripped
+    
+    context_parts = []
+    if current_h1:
+        context_parts.append(current_h1)
+    if current_h2:
+        context_parts.append(current_h2)
+    if current_h3:
+        context_parts.append(current_h3)
+    
+    return '\n'.join(context_parts)
+
 def split_large_segment(text: str, max_length: int = MAX_ENTRY_LENGTH) -> List[str]:
     """
     Split a large text segment into smaller chunks, respecting sentence boundaries.
@@ -88,15 +188,23 @@ def split_large_segment(text: str, max_length: int = MAX_ENTRY_LENGTH) -> List[s
     return chunks
 
 
-def heuristic_split(text: str, is_html: bool = False) -> List[Dict[str, Any]]:
+def heuristic_split(text: str, is_html: bool = False, is_markdown: bool = False) -> List[Dict[str, Any]]:
     """
     Splits text into segments based on double newlines or separators.
     Returns a list of dicts with 'text', 'start', 'end'.
     Respects max chunk size and adds overlap between segments.
+    Preserves markdown headers as context and handles code blocks specially.
     """
+    original_text = text
+    code_blocks = []
+    
     # Strip HTML if needed
     if is_html:
         text = strip_html(text)
+    
+    # Handle markdown code blocks - extract and preserve them
+    if is_markdown:
+        text, code_blocks = extract_code_blocks(text)
     
     segments = []
     
@@ -130,14 +238,23 @@ def heuristic_split(text: str, is_html: bool = False) -> List[Dict[str, Any]]:
                 'end': len(text)
             })
     
-    # Now process each segment: split large ones, add overlap
+    # Now process each segment: split large ones, add overlap and markdown context
     for i, seg in enumerate(raw_segments):
         seg_text = seg['text']
+        
+        # Add markdown header context if this is a markdown file
+        if is_markdown:
+            header_context = find_last_headers_before(text, seg['start'])
+            if header_context and not seg_text.startswith('#'):
+                seg_text = f"{header_context}\n\n{seg_text}"
         
         # Split large segments
         if len(seg_text) > MAX_ENTRY_LENGTH:
             sub_chunks = split_large_segment(seg_text)
             for j, chunk in enumerate(sub_chunks):
+                # Restore code blocks in each chunk
+                if is_markdown and code_blocks:
+                    chunk = restore_code_blocks(chunk, code_blocks)
                 segments.append({
                     'text': chunk,
                     'start': seg['start'],  # Approximate
@@ -149,6 +266,10 @@ def heuristic_split(text: str, is_html: bool = False) -> List[Dict[str, Any]]:
                 prev_text = raw_segments[i-1]['text']
                 overlap = prev_text[-OVERLAP_LENGTH:] if len(prev_text) > OVERLAP_LENGTH else prev_text
                 seg_text = f"[...] {overlap}\n\n{seg_text}"
+            
+            # Restore code blocks
+            if is_markdown and code_blocks:
+                seg_text = restore_code_blocks(seg_text, code_blocks)
             
             segments.append({
                 'text': seg_text,
@@ -166,10 +287,12 @@ def segment_file(db: Session, file: RawFile):
         logger.info(f"File {file.id} already has {len(file.entries)} entries. Skipping.")
         return
 
-    # Detect if HTML based on extension
-    is_html = file.extension.lower() in ['.html', '.htm']
+    # Detect content type based on extension
+    ext = file.extension.lower()
+    is_html = ext in ['.html', '.htm']
+    is_markdown = ext in ['.md', '.markdown']
     
-    segments = heuristic_split(file.raw_text, is_html=is_html)
+    segments = heuristic_split(file.raw_text, is_html=is_html, is_markdown=is_markdown)
     
     if not segments:
         logger.warning(f"No segments found for file {file.id}")
