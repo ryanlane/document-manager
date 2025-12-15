@@ -199,6 +199,347 @@
   }
 }
 
+/* Pipeline Visualization Section */
+.pipelineSection {
+  background: linear-gradient(135deg, var(--color-bg-card) 0%, rgba(100, 108, 255, 0.03) 100%);
+  border: 1px solid rgba(100, 108, 255, 0.1);
+}
+
+.pipelineHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.pipelineHeader h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+}
+
+.pipelineHint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.pipelineFlow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  overflow-x: auto;
+  padding: var(--spacing-sm) 0;
+}
+
+.stageWrapper {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.stageCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 140px;
+  position: relative;
+}
+
+.stageCard:hover {
+  border-color: var(--stage-color, var(--color-primary));
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stageCard.expanded {
+  border-color: var(--stage-color, var(--color-primary));
+  background: rgba(100, 108, 255, 0.05);
+}
+
+.stageIcon {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-card);
+  border-radius: 50%;
+  color: var(--stage-color, var(--color-text-muted));
+}
+
+.processingRing {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border: 2px solid var(--stage-color, var(--color-primary));
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.stageInfo {
+  text-align: center;
+}
+
+.stageInfo h3 {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.stageCount {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--stage-color, var(--color-primary));
+  transition: transform 0.3s ease;
+}
+
+.stageCount.pulse {
+  animation: countPulse 0.6s ease;
+}
+
+@keyframes countPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); color: var(--color-success); }
+  100% { transform: scale(1); }
+}
+
+.stagePending {
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.stageStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.statusDot.idle {
+  background: var(--color-text-muted);
+}
+
+.statusDot.pending {
+  background: var(--color-warning);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.statusDot.processing {
+  background: var(--color-primary);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.statusDot.complete {
+  background: var(--color-success);
+}
+
+.statusDot.error {
+  background: var(--color-error);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.statusLabel {
+  color: var(--color-text-muted);
+}
+
+.expandIcon {
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease;
+}
+
+.stageArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--spacing-sm);
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  transition: all 0.3s ease;
+}
+
+.stageArrow.active {
+  opacity: 1;
+  color: var(--color-primary);
+  animation: flowPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes flowPulse {
+  0%, 100% { transform: translateX(0); opacity: 0.5; }
+  50% { transform: translateX(4px); opacity: 1; }
+}
+
+/* Stage Details Panel */
+.stageDetails {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.stageDescription {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.stageDetailsList {
+  margin: 0 0 var(--spacing-md) 0;
+  padding-left: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.stageDetailsList li {
+  margin-bottom: var(--spacing-xs);
+  line-height: 1.4;
+}
+
+.stageIO {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.stageIO strong {
+  color: var(--color-text);
+}
+
+/* Pipeline Summary */
+.pipelineSummary {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-xl);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.summaryLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.summaryValue {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Responsive Pipeline */
+@media (max-width: 900px) {
+  .pipelineFlow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .stageWrapper {
+    flex-direction: column;
+  }
+  
+  .stageCard {
+    flex-direction: row;
+    width: 100%;
+    justify-content: flex-start;
+    min-width: unset;
+  }
+  
+  .stageIcon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .stageInfo {
+    text-align: left;
+    flex: 1;
+  }
+  
+  .stageCount {
+    font-size: 1.25rem;
+  }
+  
+  .stageArrow {
+    transform: rotate(90deg);
+    padding: var(--spacing-xs) 0;
+  }
+  
+  .stageDetails {
+    position: relative;
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    margin-top: var(--spacing-sm);
+  }
+  
+  .pipelineSummary {
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+  }
+}
+
 .progressHeader {
   display: flex;
   justify-content: space-between;

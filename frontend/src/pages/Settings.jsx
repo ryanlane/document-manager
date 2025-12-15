@@ -55,6 +55,10 @@ function Settings() {
   
   // Source Settings
   const [sources, setSources] = useState({ include: [], exclude: [] })
+  const [availableMounts, setAvailableMounts] = useState({ mounts: [], instructions: null })
+  const [browsePath, setBrowsePath] = useState('/data/archive')
+  const [browseItems, setBrowseItems] = useState([])
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false)
   const [newFolder, setNewFolder] = useState('')
   const [newExclude, setNewExclude] = useState('')
   
@@ -95,11 +99,12 @@ function Settings() {
   const loadSettings = async () => {
     setLoading(true)
     try {
-      const [llmRes, sourcesRes, extRes, presetsRes] = await Promise.all([
+      const [llmRes, sourcesRes, extRes, presetsRes, mountsRes] = await Promise.all([
         fetch(`${API_BASE}/settings/llm`),
         fetch(`${API_BASE}/settings/sources`),
         fetch(`${API_BASE}/settings/extensions`),
-        fetch(`${API_BASE}/settings/ollama/presets`)
+        fetch(`${API_BASE}/settings/ollama/presets`),
+        fetch(`${API_BASE}/settings/sources/mounts`)
       ])
       
       if (llmRes.ok) {
@@ -115,6 +120,9 @@ function Settings() {
       }
       if (presetsRes.ok) {
         setOllamaPresets(await presetsRes.json())
+      }
+      if (mountsRes.ok) {
+        setAvailableMounts(await mountsRes.json())
       }
       
       // Load Ollama status and models
@@ -138,6 +146,24 @@ function Settings() {
       console.error('Failed to load Ollama status:', err)
       setOllamaStatus(prev => ({ ...prev, connected: false, error: 'Failed to check status' }))
     }
+  }
+
+  const loadBrowseItems = async (path) => {
+    try {
+      const res = await fetch(`${API_BASE}/settings/sources/browse?path=${encodeURIComponent(path)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setBrowsePath(data.current_path)
+        setBrowseItems(data.items)
+      }
+    } catch (err) {
+      console.error('Failed to browse directory:', err)
+    }
+  }
+
+  const openFolderBrowser = () => {
+    setShowFolderBrowser(true)
+    loadBrowseItems('/data/archive')
   }
 
   const loadOllamaModels = async () => {
@@ -273,14 +299,18 @@ function Settings() {
 
   const addSourceFolder = async () => {
     if (!newFolder.trim()) return
+    await addSourceFolderDirect(newFolder.trim())
+    setNewFolder('')
+  }
+
+  const addSourceFolderDirect = async (path) => {
     try {
       const res = await fetch(`${API_BASE}/settings/sources/include`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: newFolder.trim() })
+        body: JSON.stringify({ path })
       })
       if (res.ok) {
-        setNewFolder('')
         loadSettings()
       } else {
         const data = await res.json()
@@ -911,43 +941,124 @@ function Settings() {
               All files matching the enabled extensions will be processed.
             </p>
 
-            <div className={styles.folderList}>
-              <h3>Included Folders</h3>
-              {sources.include?.map((folder, idx) => (
-                <div key={idx} className={styles.folderItem}>
-                  <div className={styles.folderInfo}>
-                    <span className={`${styles.status} ${folder.exists ? styles.ok : styles.missing}`}>
-                      {folder.exists ? <Check size={14} /> : <X size={14} />}
-                    </span>
-                    <span className={styles.path}>{folder.path}</span>
-                    {folder.exists && <span className={styles.count}>{folder.file_count} files</span>}
+            {/* Available Mounts Section */}
+            <div className={styles.mountsSection}>
+              <h3><HardDrive size={16} /> Available Folders</h3>
+              <p className={styles.mountsDescription}>
+                These folders are mounted from your host system and available for indexing.
+                Click to add as a source folder.
+              </p>
+              
+              {availableMounts.mounts?.length > 0 ? (
+                <div className={styles.mountsList}>
+                  {availableMounts.mounts.map((mount, idx) => {
+                    const isAdded = sources.include?.some(s => s.path === mount.path)
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`${styles.mountItem} ${isAdded ? styles.added : ''} ${!mount.accessible ? styles.inaccessible : ''}`}
+                      >
+                        <div className={styles.mountInfo}>
+                          <span className={styles.mountName}>{mount.name}</span>
+                          <span className={styles.mountPath}>{mount.path}</span>
+                          <span className={styles.mountStats}>
+                            {mount.file_count} files, {mount.subdir_count} folders
+                          </span>
+                        </div>
+                        {isAdded ? (
+                          <span className={styles.addedBadge}><Check size={14} /> Added</span>
+                        ) : mount.accessible ? (
+                          <button 
+                            className={styles.addMountBtn}
+                            onClick={() => addSourceFolderDirect(mount.path)}
+                          >
+                            <Plus size={14} /> Add
+                          </button>
+                        ) : (
+                          <span className={styles.inaccessibleBadge}>No Access</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className={styles.noMounts}>
+                  <AlertCircle size={24} />
+                  <p>No folders are currently mounted.</p>
+                </div>
+              )}
+
+              {/* Instructions for adding mounts */}
+              <details className={styles.mountInstructions}>
+                <summary>📁 How to add folders from your computer</summary>
+                <div className={styles.instructionsContent}>
+                  <p>
+                    Since Archive Brain runs in Docker, you need to mount host folders 
+                    into the container. Here's how:
+                  </p>
+                  <ol>
+                    {availableMounts.instructions?.steps?.map((step, i) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ol>
+                  <div className={styles.codeExample}>
+                    <strong>Example (add to docker-compose.yml under worker and api volumes):</strong>
+                    <code>{availableMounts.instructions?.example || '- /your/path:/data/archive/yourfolder'}</code>
                   </div>
-                  <button 
-                    className={styles.removeBtn}
-                    onClick={() => removeSourceFolder(folder.path)}
-                    title="Remove folder"
-                  >
-                    <Trash2 size={16} />
+                  <div className={styles.commonPaths}>
+                    <strong>Common mount examples:</strong>
+                    <ul>
+                      <li><code>- ~/Documents:/data/archive/documents</code> - Your Documents folder</li>
+                      <li><code>- /mnt/nas/files:/data/archive/nas</code> - Network drive</li>
+                      <li><code>- D:/Archives:/data/archive/archives</code> - Windows drive (WSL)</li>
+                    </ul>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            {/* Current Source Folders */}
+            <div className={styles.folderList}>
+              <h3>Active Source Folders</h3>
+              {sources.include?.length > 0 ? (
+                sources.include.map((folder, idx) => (
+                  <div key={idx} className={styles.folderItem}>
+                    <div className={styles.folderInfo}>
+                      <span className={`${styles.status} ${folder.exists ? styles.ok : styles.missing}`}>
+                        {folder.exists ? <Check size={14} /> : <X size={14} />}
+                      </span>
+                      <span className={styles.path}>{folder.path}</span>
+                      {folder.exists && <span className={styles.count}>{folder.file_count} files</span>}
+                    </div>
+                    <button 
+                      className={styles.removeBtn}
+                      onClick={() => removeSourceFolder(folder.path)}
+                      title="Remove folder"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className={styles.noFolders}>No source folders configured. Add folders from the list above.</p>
+              )}
+              
+              {/* Manual path input */}
+              <details className={styles.manualAdd}>
+                <summary>Add folder by path (advanced)</summary>
+                <div className={styles.addFolder}>
+                  <input
+                    type="text"
+                    value={newFolder}
+                    onChange={(e) => setNewFolder(e.target.value)}
+                    placeholder="/data/archive/foldername"
+                    onKeyDown={(e) => e.key === 'Enter' && addSourceFolder()}
+                  />
+                  <button onClick={addSourceFolder}>
+                    <FolderPlus size={18} /> Add
                   </button>
                 </div>
-              ))}
-              
-              <div className={styles.addFolder}>
-                <input
-                  type="text"
-                  value={newFolder}
-                  onChange={(e) => setNewFolder(e.target.value)}
-                  placeholder="/path/to/documents"
-                  onKeyDown={(e) => e.key === 'Enter' && addSourceFolder()}
-                />
-                <button onClick={addSourceFolder}>
-                  <FolderPlus size={18} /> Add Folder
-                </button>
-              </div>
-              <small className={styles.hint}>
-                Use container paths (e.g., /data/archive/...). 
-                Mount external folders in docker-compose.yml.
-              </small>
+              </details>
             </div>
 
             <div className={styles.folderList}>

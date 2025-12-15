@@ -14,7 +14,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Progress tracking
-SHARED_DIR = "/app/shared"
+if os.path.exists("/app/shared"):
+    SHARED_DIR = "/app/shared"
+else:
+    SHARED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "shared")
+
 EMBED_PROGRESS_FILE = os.path.join(SHARED_DIR, "embed_progress.json")
 
 # Batch processing config

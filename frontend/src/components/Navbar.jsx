@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, FileText, Activity, Menu, X, ScrollText, BookOpen, Image, Settings } from 'lucide-react'
+import { Home, FileText, Activity, Menu, X, ScrollText, BookOpen, Image, Settings, Orbit } from 'lucide-react'
 import { useState } from 'react'
 import styles from './Navbar.module.css'
+import Logo from './Logo'
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -15,7 +16,10 @@ function Navbar() {
     <nav className={styles.navbar}>
       <div className={styles.navContainer}>
         <div className={styles.brand}>
-          <Link to="/" onClick={() => setIsOpen(false)}>Archive Brain</Link>
+          <Link to="/" onClick={() => setIsOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Logo size={24} />
+            Archive Brain
+          </Link>
         </div>
         
         <button className={styles.toggle} onClick={toggleMenu}>
@@ -37,6 +41,9 @@ function Navbar() {
           </Link>
           <Link to="/logs" className={`${styles.link} ${isActive('/logs')}`} onClick={() => setIsOpen(false)}>
             <ScrollText size={18} /> Logs
+          </Link>
+          <Link to="/embeddings" className={`${styles.link} ${isActive('/embeddings')}`} onClick={() => setIsOpen(false)}>
+            <Orbit size={18} /> Embeddings
           </Link>
           <Link to="/how-it-works" className={`${styles.link} ${isActive('/how-it-works')}`} onClick={() => setIsOpen(false)}>
             <BookOpen size={18} /> How It Works

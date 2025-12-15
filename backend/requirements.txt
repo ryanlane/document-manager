@@ -13,3 +13,6 @@ Pillow
 pytesseract
 PyMuPDF
 pdf2image
+# Dimensionality reduction for embedding visualization
+scikit-learn
+umap-learn

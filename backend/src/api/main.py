@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 import os
 import json
+import yaml
 
 from src.db.session import get_db
 from src.db.models import RawFile, Entry, DocumentLink
@@ -21,7 +22,15 @@ import requests
 app = FastAPI(title="Archive Brain API")
 
 # Worker state file (shared with worker_loop.py)
-SHARED_DIR = "/app/shared"
+if os.path.exists("/app/shared"):
+    SHARED_DIR = "/app/shared"
+else:
+    # Local development fallback: backend/shared
+    SHARED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "shared")
+
+# Ensure shared directory exists
+os.makedirs(SHARED_DIR, exist_ok=True)
+
 THUMBNAIL_DIR = os.path.join(SHARED_DIR, "thumbnails")
 WORKER_STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 WORKER_LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
@@ -308,6 +317,98 @@ def update_llm_settings(settings: LLMSettingsUpdate, db: Session = Depends(get_d
     if set_setting(db, "llm", current):
         return current
     raise HTTPException(status_code=500, detail="Failed to save LLM settings")
+
+
+# Base path for archive data inside container
+ARCHIVE_BASE = "/data/archive"
+
+
+@app.get("/settings/sources/mounts")
+def get_available_mounts():
+    """
+    Get available mounted directories that can be used as source folders.
+    These are paths mounted into the Docker container from the host.
+    """
+    mounts = []
+    
+    # Check /data/archive which is the main mount point
+    if os.path.exists(ARCHIVE_BASE):
+        for item in sorted(os.listdir(ARCHIVE_BASE)):
+            item_path = os.path.join(ARCHIVE_BASE, item)
+            if os.path.isdir(item_path):
+                try:
+                    file_count = sum(1 for _ in os.scandir(item_path) if _.is_file())
+                    subdir_count = sum(1 for _ in os.scandir(item_path) if _.is_dir())
+                    mounts.append({
+                        "path": item_path,
+                        "name": item,
+                        "file_count": file_count,
+                        "subdir_count": subdir_count,
+                        "accessible": True
+                    })
+                except PermissionError:
+                    mounts.append({
+                        "path": item_path,
+                        "name": item,
+                        "file_count": 0,
+                        "subdir_count": 0,
+                        "accessible": False
+                    })
+    
+    return {
+        "base_path": ARCHIVE_BASE,
+        "mounts": mounts,
+        "instructions": {
+            "title": "Adding New Source Folders",
+            "steps": [
+                "1. Edit docker-compose.yml in the project root",
+                "2. Add a volume mount under both 'worker' and 'api' services",
+                "3. Format: - /host/path:/data/archive/foldername",
+                "4. Run: docker compose down && docker compose up -d",
+                "5. The folder will appear here and can be added as a source"
+            ],
+            "example": "- /mnt/documents:/data/archive/documents"
+        }
+    }
+
+
+@app.get("/settings/sources/browse")
+def browse_directory(path: str = ARCHIVE_BASE):
+    """Browse directories within the archive mount."""
+    # Security: Only allow browsing within /data/archive
+    if not path.startswith(ARCHIVE_BASE):
+        raise HTTPException(status_code=403, detail="Can only browse within archive directory")
+    
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f"Path not found: {path}")
+    
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+    
+    items = []
+    try:
+        for item in sorted(os.listdir(path)):
+            item_path = os.path.join(path, item)
+            is_dir = os.path.isdir(item_path)
+            if is_dir:
+                try:
+                    child_count = len(os.listdir(item_path))
+                except:
+                    child_count = 0
+                items.append({
+                    "name": item,
+                    "path": item_path,
+                    "is_dir": True,
+                    "child_count": child_count
+                })
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    return {
+        "current_path": path,
+        "parent_path": os.path.dirname(path) if path != ARCHIVE_BASE else None,
+        "items": items
+    }
 
 
 @app.get("/settings/sources")
@@ -1341,7 +1442,12 @@ def get_enrichment_config():
     import yaml
     import os
     
-    config_path = os.environ.get("CONFIG_PATH", "/app/config/config.yaml")
+    config_path = os.environ.get("CONFIG_PATH")
+    if not config_path:
+        if os.path.exists("/app/config/config.yaml"):
+            config_path = "/app/config/config.yaml"
+        else:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "config.yaml")
     
     try:
         with open(config_path, 'r') as f:
@@ -1798,4 +1904,381 @@ def search_with_explanation(
             "keyword_search": "Uses PostgreSQL full-text search (BM25) to find exact word matches.",
             "hybrid_search": "Combines vector (70%) and keyword (30%) scores for best results."
         }
+    }
+
+
+
+
+
+
+
+
+
+
+
+@app.get("/entries/list")
+def list_entries(
+    skip: int = 0,
+    limit: int = 50,
+    status: str = None,
+    has_embedding: bool = None,
+    db: Session = Depends(get_db)
+):
+    """List entries with optional filtering for the Entry Inspector."""
+    query = db.query(Entry).join(RawFile)
+    
+    if status:
+        query = query.filter(Entry.status == status)
+    if has_embedding is not None:
+        if has_embedding:
+            query = query.filter(Entry.embedding.isnot(None))
+        else:
+            query = query.filter(Entry.embedding.is_(None))
+    
+    total = query.count()
+    entries = query.order_by(Entry.updated_at.desc()).offset(skip).limit(limit).all()
+    
+    return {
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "entries": [
+            {
+                "id": e.id,
+                "title": e.title,
+                "summary": e.summary[:100] + "..." if e.summary and len(e.summary) > 100 else e.summary,
+                "category": e.category,
+                "author": e.author,
+                "status": e.status,
+                "has_embedding": e.embedding is not None,
+                "file_id": e.file_id,
+                "filename": e.raw_file.filename if e.raw_file else None,
+                "updated_at": e.updated_at.isoformat() if e.updated_at else None
+            }
+            for e in entries
+        ]
+    }
+
+@app.get("/entries/{entry_id}/inspect")
+def inspect_entry(entry_id: int, db: Session = Depends(get_db)):
+    """
+    Get full details for an entry inspector view:
+    - Raw text
+    - Current metadata
+    - Constructed prompt (simulation)
+    - Pipeline journey status
+    """
+    entry = db.query(Entry).filter(Entry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    # Get the file info
+    file = db.query(RawFile).filter(RawFile.id == entry.file_id).first()
+    
+    # Reconstruct the prompt
+    config_path = "/app/config/config.yaml"
+    if not os.path.exists(config_path):
+        # Fallback for local development
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "config.yaml")
+
+    prompt_template = """
+You are a document archivist. Analyze the following text and extract metadata in JSON format.
+Return ONLY the JSON object.
+
+Fields required:
+- title: A concise title for this segment.
+- author: The author if mentioned, else null.
+- created_hint: A date string (YYYY-MM-DD) or approximate timeframe if mentioned, else null.
+- tags: An array of 3-5 relevant tags.
+- summary: A 2-4 sentence summary of the content.
+
+Text:
+{text}
+"""
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                yaml_config = yaml.safe_load(f)
+                if yaml_config and 'enrichment' in yaml_config:
+                    if 'prompt_template' in yaml_config['enrichment']:
+                        prompt_template = yaml_config['enrichment']['prompt_template']
+    except Exception:
+        pass
+        
+    constructed_prompt = prompt_template.replace("{text}", entry.entry_text)
+    
+    # Determine pipeline stages
+    stages = [
+        {"name": "Ingest", "status": "complete", "description": "File uploaded and text extracted"},
+        {"name": "Segment", "status": "complete", "description": f"Split into chunk {entry.chunk_index}"}
+    ]
+    
+    if entry.title:
+        stages.append({"name": "Enrich", "status": "complete", "description": "Metadata extracted by LLM"})
+    else:
+        stages.append({"name": "Enrich", "status": "pending", "description": "Waiting for LLM processing"})
+        
+    if entry.embedding is not None:
+        stages.append({"name": "Embed", "status": "complete", "description": "Vector embedding generated"})
+    else:
+        stages.append({"name": "Embed", "status": "pending", "description": "Waiting for vectorization"})
+
+    # Embedding stats
+    embedding_stats = None
+    if entry.embedding is not None:
+        # Convert numpy array or list to list
+        vec = entry.embedding
+        if hasattr(vec, 'tolist'):
+            vec = vec.tolist()
+            
+        import numpy as np
+        arr = np.array(vec)
+        embedding_stats = {
+            "dimensions": len(vec),
+            "min": float(np.min(arr)),
+            "max": float(np.max(arr)),
+            "mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+            "norm": float(np.linalg.norm(arr)),
+            "first_10_values": vec[:10],
+            "last_10_values": vec[-10:]
+        }
+
+    return {
+        "entry": {
+            "id": entry.id,
+            "file_id": entry.file_id,
+            "chunk_index": entry.chunk_index,
+            "entry_text": entry.entry_text,
+            "entry_index": entry.chunk_index,
+            "char_start": 0,
+            "char_end": len(entry.entry_text),
+            "content_hash": entry.content_hash,
+            "title": entry.title,
+            "summary": entry.summary,
+            "tags": entry.tags,
+            "author": entry.author,
+            "category": entry.category,
+            "created_hint": entry.created_hint,
+            "status": entry.status,
+            "has_embedding": entry.embedding is not None,
+            "updated_at": entry.updated_at
+        },
+        "source_file": {
+            "id": file.id,
+            "filename": file.filename,
+            "path": file.file_path,
+            "series_name": file.series_name,
+            "series_number": file.series_number
+        } if file else None,
+        "enrichment": {
+            "prompt_length_chars": len(constructed_prompt),
+            "actual_prompt": constructed_prompt,
+            "raw_response": entry.extra_meta
+        },
+        "embedding": embedding_stats,
+        "pipeline_journey": {
+            "stages": stages
+        }
+    }
+
+@app.get("/entries/{entry_id}/nearby")
+def get_nearby_entries(entry_id: int, k: int = 8, db: Session = Depends(get_db)):
+    """Get entries that are semantically close to this one."""
+    entry = db.query(Entry).filter(Entry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+        
+    if entry.embedding is None:
+        return {"nearby": []}
+        
+    # Use pgvector <-> operator for L2 distance (or <=> for cosine distance)
+    sql = text("""
+        SELECT e.id, e.title, e.summary, e.category, rf.filename, 
+               1 - (e.embedding <=> (SELECT embedding FROM entries WHERE id = :id)) as similarity
+        FROM entries e
+        JOIN raw_files rf ON e.file_id = rf.id
+        WHERE e.id != :id AND e.embedding IS NOT NULL
+        ORDER BY e.embedding <=> (SELECT embedding FROM entries WHERE id = :id) ASC
+        LIMIT :k
+    """)
+    
+    rows = db.execute(sql, {"id": entry_id, "k": k}).fetchall()
+    
+    return {
+        "nearby": [
+            {
+                "id": row[0],
+                "title": row[1],
+                "summary": row[2],
+                "category": row[3],
+                "filename": row[4],
+                "similarity": float(row[5])
+            }
+            for row in rows
+        ]
+    }
+
+@app.get("/entries/{entry_id}/embedding-viz")
+def get_embedding_viz(entry_id: int, db: Session = Depends(get_db)):
+    """Get visualization data for the embedding vector."""
+    entry = db.query(Entry).filter(Entry.id == entry_id).first()
+    if not entry or entry.embedding is None:
+        raise HTTPException(status_code=404, detail="Entry or embedding not found")
+        
+    vec = entry.embedding
+    if hasattr(vec, 'tolist'):
+        vec = vec.tolist()
+        
+    # Create 64 buckets for visualization
+    import numpy as np
+    arr = np.array(vec)
+    
+    # Normalize to 0-1 for visualization
+    min_val = np.min(arr)
+    max_val = np.max(arr)
+    range_val = max_val - min_val if max_val > min_val else 1.0
+    
+    normalized = (arr - min_val) / range_val
+    
+    # Downsample to 64 buckets by averaging
+    bucket_size = len(normalized) // 64
+    if bucket_size < 1: bucket_size = 1
+    
+    buckets = []
+    raw_buckets = []
+    
+    for i in range(0, len(normalized), bucket_size):
+        chunk = normalized[i:i+bucket_size]
+        raw_chunk = arr[i:i+bucket_size]
+        if len(chunk) > 0:
+            buckets.append(float(np.mean(chunk)))
+            raw_buckets.append(float(np.mean(raw_chunk)))
+            
+    return {
+        "visualization": {
+            "buckets": buckets[:64], # Ensure max 64
+            "raw_buckets": raw_buckets[:64]
+        }
+    }
+
+
+@app.get("/embeddings/visualize")
+def visualize_embeddings(
+    dimensions: int = 2,
+    algorithm: str = "tsne",
+    category: Optional[str] = None,
+    author: Optional[str] = None,
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    """
+    Get dimensionality-reduced embeddings for visualization.
+    
+    Parameters:
+    - dimensions: 2 or 3 for 2D/3D visualization
+    - algorithm: 'tsne' or 'umap'
+    - category: Optional filter by category
+    - author: Optional filter by author
+    - limit: Max number of entries to visualize (default 1000)
+    """
+    import numpy as np
+    from sklearn.manifold import TSNE
+    try:
+        from umap import UMAP
+    except ImportError:
+        UMAP = None
+    
+    # Validate parameters
+    if dimensions not in [2, 3]:
+        raise HTTPException(status_code=400, detail="dimensions must be 2 or 3")
+    
+    if algorithm not in ['tsne', 'umap']:
+        raise HTTPException(status_code=400, detail="algorithm must be 'tsne' or 'umap'")
+    
+    if algorithm == 'umap' and UMAP is None:
+        raise HTTPException(status_code=400, detail="UMAP not installed. Use 'tsne' or install umap-learn")
+    
+    # Query entries with embeddings (check for embedding presence, not status)
+    query = db.query(Entry).filter(
+        Entry.embedding.isnot(None)
+    )
+    
+    if category:
+        query = query.filter(Entry.category == category)
+    if author:
+        query = query.filter(Entry.author == author)
+    
+    entries = query.limit(limit).all()
+    
+    if len(entries) < 2:
+        return {
+            "error": "Not enough entries with embeddings",
+            "count": len(entries),
+            "points": []
+        }
+    
+    # Extract embeddings and metadata
+    embeddings = []
+    metadata = []
+    
+    for entry in entries:
+        if entry.embedding is not None and len(entry.embedding) > 0:
+            embeddings.append(entry.embedding)
+            
+            # Get file info
+            raw_file = db.query(RawFile).filter(RawFile.id == entry.file_id).first()
+            
+            metadata.append({
+                "entry_id": entry.id,
+                "title": entry.title or "Untitled",
+                "category": entry.category or "Unknown",
+                "author": entry.author or "Unknown",
+                "file_type": raw_file.extension if raw_file else "unknown",
+                "filename": raw_file.filename if raw_file else "",
+                "summary": (entry.summary or "")[:100]  # First 100 chars
+            })
+    
+    # Convert to numpy array
+    embeddings_array = np.array(embeddings)
+    
+    # Perform dimensionality reduction
+    if algorithm == 'tsne':
+        reducer = TSNE(
+            n_components=dimensions,
+            random_state=42,
+            perplexity=min(30, len(embeddings) - 1)
+        )
+    else:  # umap
+        reducer = UMAP(
+            n_components=dimensions,
+            random_state=42,
+            n_neighbors=min(15, len(embeddings) - 1)
+        )
+    
+    reduced = reducer.fit_transform(embeddings_array)
+    
+    # Combine with metadata
+    points = []
+    for i, coords in enumerate(reduced):
+        point = metadata[i].copy()
+        point['x'] = float(coords[0])
+        point['y'] = float(coords[1])
+        if dimensions == 3:
+            point['z'] = float(coords[2])
+        points.append(point)
+    
+    # Get unique categories and authors for legend
+    categories = list(set(p['category'] for p in points))
+    authors = list(set(p['author'] for p in points))
+    file_types = list(set(p['file_type'] for p in points))
+    
+    return {
+        "points": points,
+        "count": len(points),
+        "dimensions": dimensions,
+        "algorithm": algorithm,
+        "categories": sorted(categories),
+        "authors": sorted(authors),
+        "file_types": sorted(file_types)
     }

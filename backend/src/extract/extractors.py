@@ -39,7 +39,12 @@ TEXT_EXTENSIONS = {'.txt', '.md', '.html', '.json', '.yaml', '.yml', '.py', '.js
 
 # Thumbnail settings
 THUMBNAIL_SIZE = (300, 300)
-THUMBNAIL_DIR = os.environ.get("THUMBNAIL_DIR", "/app/shared/thumbnails")
+THUMBNAIL_DIR = os.environ.get("THUMBNAIL_DIR")
+if not THUMBNAIL_DIR:
+    if os.path.exists("/app/shared/thumbnails"):
+        THUMBNAIL_DIR = "/app/shared/thumbnails"
+    else:
+        THUMBNAIL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "shared", "thumbnails")
 
 
 def get_file_type(extension: str) -> str:

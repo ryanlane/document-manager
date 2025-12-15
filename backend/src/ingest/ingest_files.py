@@ -27,7 +27,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Progress tracking
-SHARED_DIR = os.environ.get("SHARED_DIR", "/app/shared")
+SHARED_DIR = os.environ.get("SHARED_DIR")
+if not SHARED_DIR:
+    if os.path.exists("/app/shared"):
+        SHARED_DIR = "/app/shared"
+    else:
+        SHARED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "shared")
+
 PROGRESS_FILE = os.path.join(SHARED_DIR, "ingest_progress.json")
 STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 

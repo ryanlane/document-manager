@@ -18,9 +18,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Progress tracking
-SHARED_DIR = "/app/shared"
+if os.path.exists("/app/shared"):
+    SHARED_DIR = "/app/shared"
+else:
+    SHARED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "shared")
+
 ENRICH_PROGRESS_FILE = os.path.join(SHARED_DIR, "enrich_progress.json")
-CONFIG_FILE = "/app/config/config.yaml"
+
+if os.path.exists("/app/config/config.yaml"):
+    CONFIG_FILE = "/app/config/config.yaml"
+else:
+    CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "config.yaml")
 
 # Default prompt template (fallback if config not found)
 DEFAULT_PROMPT_TEMPLATE = """

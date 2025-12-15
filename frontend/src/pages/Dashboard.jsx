@@ -1,7 +1,95 @@
 import { useState, useEffect } from 'react'
-import { Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, Play, Pause, Power, RefreshCw, CheckCircle, FilePlus, FileEdit, FileX } from 'lucide-react'
+import { 
+  Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, 
+  Play, Pause, Power, RefreshCw, CheckCircle, FilePlus, FileEdit, FileX,
+  ArrowRight, Scissors, Sparkles, Binary, Search, ChevronDown, ChevronUp,
+  Info, Zap, Box
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './Dashboard.module.css'
+
+// Pipeline stage definitions with educational content
+const PIPELINE_STAGES = {
+  ingest: {
+    id: 'ingest',
+    name: 'Ingest',
+    icon: FilePlus,
+    color: '#646cff',
+    description: 'Files are discovered and read from your source folders.',
+    details: [
+      'Scans configured source folders for new or modified files',
+      'Extracts raw text using Tika (for documents) or OCR (for images)',
+      'Stores file metadata: path, size, extension, timestamps',
+      'Creates initial RawFile records in the database'
+    ],
+    inputLabel: 'Source Files',
+    outputLabel: 'Raw Text'
+  },
+  segment: {
+    id: 'segment',
+    name: 'Segment',
+    icon: Scissors,
+    color: '#f97316',
+    description: 'Long documents are split into searchable chunks.',
+    details: [
+      'Breaks large documents into smaller segments (~1000-1500 tokens)',
+      'Respects sentence and paragraph boundaries',
+      'Adds configurable overlap between chunks for context continuity',
+      'Detects content type (HTML, Markdown, plain text) for smart splitting',
+      'Creates Entry records for each segment'
+    ],
+    inputLabel: 'Raw Text',
+    outputLabel: 'Text Chunks'
+  },
+  enrich: {
+    id: 'enrich',
+    name: 'Enrich',
+    icon: Sparkles,
+    color: '#ffc517',
+    description: 'AI analyzes each segment to extract metadata.',
+    details: [
+      'Sends each segment to the LLM with a structured prompt',
+      'Extracts: title, summary, tags, themes, sentiment, entities',
+      'Detects category from folder structure',
+      'Calculates quality scores for each entry',
+      'Stores enriched metadata in JSON format'
+    ],
+    inputLabel: 'Text Chunks',
+    outputLabel: 'Enriched Entries'
+  },
+  embed: {
+    id: 'embed',
+    name: 'Embed',
+    icon: Binary,
+    color: '#42b883',
+    description: 'Text is converted to vector embeddings for semantic search.',
+    details: [
+      'Creates a combined text from: title, summary, tags, and content',
+      'Sends to embedding model (e.g., nomic-embed-text)',
+      'Receives a 768-dimensional vector representing meaning',
+      'Stores vector in pgvector for fast similarity search',
+      'Enables finding related content by meaning, not just keywords'
+    ],
+    inputLabel: 'Enriched Entries',
+    outputLabel: 'Vector Embeddings'
+  },
+  search: {
+    id: 'search',
+    name: 'Searchable',
+    icon: Search,
+    color: '#ec4899',
+    description: 'Content is now fully indexed and searchable.',
+    details: [
+      'Hybrid search combines vector similarity + keyword matching',
+      'Vector search finds semantically related content',
+      'Keyword search uses PostgreSQL full-text search (BM25)',
+      'Results can be filtered by author, category, tags, etc.',
+      'Similarity scores show how closely results match your query'
+    ],
+    inputLabel: 'Vector Embeddings',
+    outputLabel: 'Search Results'
+  }
+}
 
 function Dashboard() {
   const [metrics, setMetrics] = useState(null)
@@ -9,11 +97,25 @@ function Dashboard() {
   const [pipelineProgress, setPipelineProgress] = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [expandedStage, setExpandedStage] = useState(null)
+  const [animatingCounts, setAnimatingCounts] = useState({})
 
   const fetchMetrics = async () => {
     try {
       const res = await fetch('/api/system/metrics')
       const data = await res.json()
+      
+      // Animate count changes
+      if (metrics) {
+        const newAnimating = {}
+        if (data.files.total !== metrics.files.total) newAnimating.files = true
+        if (data.entries.total !== metrics.entries.total) newAnimating.segments = true
+        if (data.entries.enriched !== metrics.entries.enriched) newAnimating.enriched = true
+        if (data.entries.embedded !== metrics.entries.embedded) newAnimating.embedded = true
+        setAnimatingCounts(newAnimating)
+        setTimeout(() => setAnimatingCounts({}), 600)
+      }
+      
       setMetrics(data)
       setLastUpdate(new Date())
       setLoading(false)
@@ -89,10 +191,74 @@ function Dashboard() {
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
   }
 
+  // Get stage status based on metrics and worker state
+  const getStageStatus = (stageId) => {
+    if (!metrics || !workerState) return 'idle'
+    
+    const isProcessing = pipelineProgress?.[stageId]?.total > 0 && 
+                         pipelineProgress?.[stageId]?.percent < 100
+    
+    if (stageId === 'ingest') {
+      if (pipelineProgress?.ingest?.phase === 'scanning' || 
+          pipelineProgress?.ingest?.phase === 'processing') return 'processing'
+      if (metrics.files.total > 0) return 'complete'
+      return 'idle'
+    }
+    if (stageId === 'segment') {
+      if (metrics.entries.total > 0) return 'complete'
+      if (workerState.segment) return 'processing'
+      return 'idle'
+    }
+    if (stageId === 'enrich') {
+      if (isProcessing) return 'processing'
+      if (metrics.entries.enriched === metrics.entries.total && metrics.entries.total > 0) return 'complete'
+      if (metrics.entries.pending > 0) return 'pending'
+      return 'idle'
+    }
+    if (stageId === 'embed') {
+      if (isProcessing) return 'processing'
+      if (metrics.entries.embedded === metrics.entries.total && metrics.entries.total > 0) return 'complete'
+      if (metrics.entries.enriched > metrics.entries.embedded) return 'pending'
+      return 'idle'
+    }
+    if (stageId === 'search') {
+      if (metrics.entries.embedded > 0) return 'complete'
+      return 'idle'
+    }
+    return 'idle'
+  }
+
+  // Get count for each stage
+  const getStageCount = (stageId) => {
+    if (!metrics) return 0
+    switch (stageId) {
+      case 'ingest': return metrics.files.total
+      case 'segment': return metrics.entries.total
+      case 'enrich': return metrics.entries.enriched
+      case 'embed': return metrics.entries.embedded
+      case 'search': return metrics.entries.embedded
+      default: return 0
+    }
+  }
+
+  // Get pending count for each stage
+  const getStagePending = (stageId) => {
+    if (!metrics) return 0
+    switch (stageId) {
+      case 'ingest': return metrics.files.pending || 0
+      case 'segment': return 0
+      case 'enrich': return metrics.entries.pending || 0
+      case 'embed': return (metrics.entries.enriched - metrics.entries.embedded) || 0
+      case 'search': return 0
+      default: return 0
+    }
+  }
+
   if (loading) return <div className={styles.loading}>Loading metrics...</div>
 
   const enrichedPct = ((metrics.entries.enriched / (metrics.entries.total || 1)) * 100).toFixed(1)
   const embeddedPct = ((metrics.entries.embedded / (metrics.entries.total || 1)) * 100).toFixed(1)
+  const stageOrder = ['ingest', 'segment', 'enrich', 'embed', 'search']
 
   return (
     <div className={styles.page}>
@@ -103,6 +269,109 @@ function Dashboard() {
             <Clock size={14} /> Updated {lastUpdate.toLocaleTimeString()}
           </span>
         )}
+      </div>
+
+      {/* Pipeline Visualization */}
+      <div className={`${styles.section} ${styles.pipelineSection}`}>
+        <div className={styles.pipelineHeader}>
+          <h2><Zap size={18} /> RAG Pipeline</h2>
+          <span className={styles.pipelineHint}>
+            <Info size={14} /> Click any stage to learn more
+          </span>
+        </div>
+        
+        <div className={styles.pipelineFlow}>
+          {stageOrder.map((stageId, index) => {
+            const stage = PIPELINE_STAGES[stageId]
+            const status = getStageStatus(stageId)
+            const count = getStageCount(stageId)
+            const pending = getStagePending(stageId)
+            const isExpanded = expandedStage === stageId
+            const isAnimating = animatingCounts[stageId === 'ingest' ? 'files' : 
+                                                 stageId === 'segment' ? 'segments' :
+                                                 stageId === 'enrich' ? 'enriched' : 'embedded']
+            const StageIcon = stage.icon
+            
+            return (
+              <div key={stageId} className={styles.stageWrapper}>
+                {/* Stage Card */}
+                <div 
+                  className={`${styles.stageCard} ${styles[status]} ${isExpanded ? styles.expanded : ''}`}
+                  onClick={() => setExpandedStage(isExpanded ? null : stageId)}
+                  style={{ '--stage-color': stage.color }}
+                >
+                  <div className={styles.stageIcon}>
+                    <StageIcon size={24} />
+                    {status === 'processing' && (
+                      <div className={styles.processingRing}></div>
+                    )}
+                  </div>
+                  
+                  <div className={styles.stageInfo}>
+                    <h3>{stage.name}</h3>
+                    <div className={`${styles.stageCount} ${isAnimating ? styles.pulse : ''}`}>
+                      {count.toLocaleString()}
+                    </div>
+                    {pending > 0 && (
+                      <div className={styles.stagePending}>
+                        +{pending.toLocaleString()} pending
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className={styles.stageStatus}>
+                    <span className={`${styles.statusDot} ${styles[status]}`}></span>
+                    <span className={styles.statusLabel}>{status}</span>
+                  </div>
+                  
+                  <div className={styles.expandIcon}>
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+                </div>
+                
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className={styles.stageDetails}>
+                    <p className={styles.stageDescription}>{stage.description}</p>
+                    <ul className={styles.stageDetailsList}>
+                      {stage.details.map((detail, i) => (
+                        <li key={i}>{detail}</li>
+                      ))}
+                    </ul>
+                    <div className={styles.stageIO}>
+                      <span><strong>Input:</strong> {stage.inputLabel}</span>
+                      <ArrowRight size={14} />
+                      <span><strong>Output:</strong> {stage.outputLabel}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Arrow to next stage */}
+                {index < stageOrder.length - 1 && (
+                  <div className={`${styles.stageArrow} ${status === 'processing' ? styles.active : ''}`}>
+                    <ArrowRight size={20} />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        
+        {/* Pipeline Summary */}
+        <div className={styles.pipelineSummary}>
+          <div className={styles.summaryItem}>
+            <span className={styles.summaryLabel}>Files Processed</span>
+            <span className={styles.summaryValue}>{metrics.files.processed} / {metrics.files.total}</span>
+          </div>
+          <div className={styles.summaryItem}>
+            <span className={styles.summaryLabel}>Entries Enriched</span>
+            <span className={styles.summaryValue}>{metrics.entries.enriched} / {metrics.entries.total}</span>
+          </div>
+          <div className={styles.summaryItem}>
+            <span className={styles.summaryLabel}>Searchable</span>
+            <span className={styles.summaryValue}>{metrics.entries.embedded} entries</span>
+          </div>
+        </div>
       </div>
 
       {/* Worker Controls */}

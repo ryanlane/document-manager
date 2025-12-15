@@ -5,7 +5,12 @@ import os
 import json
 
 # Shared paths - must be set before logging config
-SHARED_DIR = "/app/shared"
+if os.path.exists("/app/shared"):
+    SHARED_DIR = "/app/shared"
+else:
+    # Local development fallback: backend/shared
+    SHARED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shared")
+
 STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
 

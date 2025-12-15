@@ -9,10 +9,12 @@ import ResolveLink from './pages/ResolveLink'
 import HowItWorks from './pages/HowItWorks'
 import Gallery from './pages/Gallery'
 import Settings from './pages/Settings'
+import EntryInspector from './pages/EntryInspector'
+import EmbeddingViz from './pages/EmbeddingViz'
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Navbar />
       <div style={{ paddingTop: '60px' }}>
         <Routes>
@@ -25,6 +27,9 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/document/:id" element={<DocumentView />} />
           <Route path="/resolve" element={<ResolveLink />} />
+          <Route path="/entry" element={<EntryInspector />} />
+          <Route path="/entry/:entryId" element={<EntryInspector />} />
+          <Route path="/embeddings" element={<EmbeddingViz />} />
         </Routes>
       </div>
     </Router>

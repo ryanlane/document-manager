@@ -11,7 +11,9 @@ export default defineConfig({
       '/api': {
         target: 'http://api:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        timeout: 60000,
+        proxyTimeout: 60000
       }
     }
   }

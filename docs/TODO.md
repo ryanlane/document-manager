@@ -45,27 +45,27 @@
 
 ## 🎓 Educational & Transparency Features
 
-### E1. Pipeline Visualization Dashboard
-- [ ] Visual flowchart showing data flow: File → Segments → Enriched → Embedded → Searchable
-- [ ] Show counts at each stage with animated transitions
-- [ ] Click on any stage to see detailed explanation of what happens there
-- [ ] Color-coded status (pending/processing/complete/error) for each stage
-- **Files**: `frontend/src/pages/Dashboard.jsx`
+### E1. Pipeline Visualization Dashboard ✅
+- [x] Visual flowchart showing data flow: File → Segments → Enriched → Embedded → Searchable
+- [x] Show counts at each stage with animated transitions
+- [x] Click on any stage to see detailed explanation of what happens there
+- [x] Color-coded status (pending/processing/complete/error) for each stage
+- **Files**: `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Dashboard.module.css`
 
-### E2. Real-time Processing Log Viewer
-- [ ] Live-updating log stream on dashboard (WebSocket or polling)
-- [ ] Filter logs by stage (ingest/segment/enrich/embed)
-- [ ] Highlight important events (new file, LLM call, embedding generated)
-- [ ] Show timing information (how long each step takes)
-- **Files**: `frontend/src/pages/Logs.jsx`, `backend/src/api/main.py`
+### E2. Real-time Processing Log Viewer ✅
+- [x] Live-updating log stream on dashboard (WebSocket or polling)
+- [x] Filter logs by stage (ingest/segment/enrich/embed)
+- [x] Highlight important events (new file, LLM call, embedding generated)
+- [x] Show timing information (how long each step takes)
+- **Files**: `frontend/src/pages/Logs.jsx`, `frontend/src/pages/Logs.module.css`
 
-### E3. Entry Inspector / Debug View
-- [ ] Click any entry to see its full journey: raw text → segments → enrichment prompt → LLM response → embedding
-- [ ] Show the actual prompt sent to the LLM
-- [ ] Show the raw JSON response from enrichment
-- [ ] Visualize the embedding vector (dimensionality reduction to 2D/3D plot?)
-- [ ] Show which other entries are "nearby" in vector space
-- **Files**: New `frontend/src/pages/EntryInspector.jsx`
+### E3. Entry Inspector / Debug View ✅
+- [x] Click any entry to see its full journey: raw text → segments → enrichment prompt → LLM response → embedding
+- [x] Show the actual prompt sent to the LLM (reconstructed from config)
+- [x] Show the raw JSON response from enrichment
+- [x] Visualize the embedding vector (64-bucket heatmap with normalization)
+- [x] Show which other entries are "nearby" in vector space (pgvector cosine similarity, top 8)
+- **Files**: `frontend/src/pages/EntryInspector.jsx`, `frontend/src/pages/EntryInspector.module.css`, `backend/src/api/main.py` (endpoints: `/entries/list`, `/entries/{id}/inspect`, `/entries/{id}/nearby`, `/entries/{id}/embedding-viz`)
 
 ### E4. Search Explainer ✅
 - [x] When searching, show WHY each result matched
@@ -82,13 +82,13 @@
 - [x] Show model name and parameters used for each call
 - **Files**: `frontend/src/pages/HowItWorks.jsx`
 
-### E6. Embedding Visualizer
-- [ ] 2D/3D scatter plot of all embeddings using t-SNE or UMAP
-- [ ] Color by category, author, or file type
-- [ ] Hover to see entry title/summary
-- [ ] Click to navigate to entry
-- [ ] Show where a search query lands in the space
-- **Files**: New `frontend/src/pages/EmbeddingViz.jsx`, need to add dimensionality reduction endpoint
+### E6. Embedding Visualizer ✅
+- [x] 2D/3D scatter plot of all embeddings using t-SNE or UMAP
+- [x] Color by category, author, or file type
+- [x] Hover to see entry title/summary
+- [x] Click to navigate to entry
+- [ ] Show where a search query lands in the space (endpoint exists but needs frontend integration)
+- **Files**: `frontend/src/pages/EmbeddingViz.jsx`, `frontend/src/pages/EmbeddingViz.module.css`, `backend/src/api/main.py` (`/embeddings/visualize` endpoint)
 
 ### E7. Processing Statistics & Timing
 - [ ] Track and display average time per: ingest, segment, enrich, embed
