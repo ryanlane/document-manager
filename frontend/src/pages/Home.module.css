@@ -18,15 +18,26 @@
 
 .searchForm {
   display: flex;
+  flex-direction: column;
   gap: var(--spacing-md);
   width: 100%;
   max-width: 700px;
 }
 
 .searchInput {
-  flex: 1;
+  width: 100%;
   font-size: var(--font-size-lg);
   padding: 0.8em 1.2em;
+  resize: vertical;
+  font-family: inherit;
+  min-height: 120px;
+}
+
+.searchControls {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-md);
+  align-items: center;
 }
 
 .modelSelect {

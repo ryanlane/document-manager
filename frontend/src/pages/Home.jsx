@@ -61,30 +61,32 @@ function Home() {
       </h1>
       
       <form className={styles.searchForm} onSubmit={handleSearch}>
-        <input
-          type="text"
+        <textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Ask your archive a question..."
           className={styles.searchInput}
+          rows={4}
         />
         
-        {status && status.ollama.available_models && (
-          <select 
-            value={selectedModel} 
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className={styles.modelSelect}
-            title="Select Chat Model"
-          >
-            {status.ollama.available_models.map(model => (
-              <option key={model} value={model}>{model}</option>
-            ))}
-          </select>
-        )}
+        <div className={styles.searchControls}>
+          {status && status.ollama.available_models && (
+            <select 
+              value={selectedModel} 
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className={styles.modelSelect}
+              title="Select Chat Model"
+            >
+              {status.ollama.available_models.map(model => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
+          )}
 
-        <button type="submit" disabled={loading} className={styles.searchButton}>
-          {loading ? 'Thinking...' : <Search size={20} />}
-        </button>
+          <button type="submit" disabled={loading} className={styles.searchButton}>
+            {loading ? 'Thinking...' : <Search size={20} />}
+          </button>
+        </div>
       </form>
 
       {result && (

@@ -63,7 +63,19 @@ function DocumentView() {
   const getProcessedText = (text) => {
     if (!text) return ''
     // Remove the specific boilerplate found in some .txt files
-    return text.replace(/<!--ADULTSONLY-->[\s\S]*?Note: This story was dynamically reformatted for online reading convenience\.\s*<\/font>/i, '').trim()
+    let processed = text.replace(/<!--ADULTSONLY-->[\s\S]*?Note: This story was dynamically reformatted for online reading convenience\.\s*<\/font>/i, '')
+    // Remove the shorter boilerplate ending in <pre>
+    processed = processed.replace(/<!--ADULTSONLY-->[\s\S]*?<pre>/i, '')
+    
+    // Reflow paragraphs:
+    // 1. Split by double newlines (paragraph breaks)
+    // 2. Replace single newlines within paragraphs with spaces
+    // 3. Join back with double newlines
+    return processed
+      .split(/\n\s*\n/)
+      .map(para => para.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
+      .join('\n\n')
+      .trim()
   }
 
   return (
