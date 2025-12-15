@@ -295,6 +295,10 @@ def main():
         
         # Update progress every 100 files or at key milestones (reduced frequency for speed)
         if i % 100 == 0 or i == total - 1:
+            if check_stop_signal():
+                logger.info("Ingest paused by user request during scanning.")
+                update_progress("idle", 0, 0)
+                return
             update_progress(
                 phase="scanning",
                 current=i + 1,
