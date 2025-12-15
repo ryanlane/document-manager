@@ -36,3 +36,36 @@ llm:
   base_url: "http://host.docker.internal:11434"
   model: "dolphin-phi"
   embedding_model: "nomic-embed-text"
+
+# Enrichment Configuration
+enrichment:
+  # Maximum text length to send to LLM (chars)
+  max_text_length: 4000
+  
+  # Prompt template for metadata extraction
+  # Available variables: {text}
+  prompt_template: |
+    You are a document archivist. Analyze the following text and extract metadata in JSON format.
+    Return ONLY the JSON object.
+    
+    Fields required:
+    - title: A concise title for this segment.
+    - author: The author if mentioned, else null.
+    - created_hint: A date string (YYYY-MM-DD) or approximate timeframe if mentioned, else null.
+    - tags: An array of 3-5 relevant tags.
+    - summary: A 2-4 sentence summary of the content.
+    
+    Text:
+    {text}
+  
+  # Custom metadata fields to extract (in addition to defaults)
+  # Each field needs: name, type (string/array/date), description
+  custom_fields: []
+  # Example:
+  # custom_fields:
+  #   - name: "genre"
+  #     type: "string"
+  #     description: "The literary genre of the content"
+  #   - name: "characters"
+  #     type: "array"
+  #     description: "List of character names mentioned"

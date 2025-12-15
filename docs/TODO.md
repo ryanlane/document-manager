@@ -118,25 +118,31 @@
 
 ## 🟡 Medium Priority (Features)
 
-### 6. Relationship/Link Extraction
-- [ ] Parse and store document links in DB
-- [ ] Add "related documents" feature to frontend
-- **Files**: `backend/src/segment/segment_entries.py`, new table needed
+### 6. Relationship/Link Extraction ✅
+- [x] Parse and store document links in DB (HTML href, Markdown, raw URLs, emails)
+- [x] New `DocumentLink` model with file_id, url, link_text, link_type, domain
+- [x] API endpoints: `/files/{id}/links`, `/files/{id}/related`, `/links/stats`
+- [x] Find related documents based on shared domains
+- **Files**: `backend/src/db/models.py`, `backend/src/segment/segment_entries.py`, `backend/src/api/main.py`
+- **Migration**: `backend/migrations/003_add_document_links.sql`
 
-### 7. Deduplication at Entry Level
-- [ ] Hash entry text content
-- [ ] Skip duplicate segments across files
-- **Files**: `backend/src/segment/segment_entries.py`
+### 7. Deduplication at Entry Level ✅
+- [x] Hash entry text content (SHA256 of normalized text)
+- [x] Skip duplicate segments across files
+- [x] Added `content_hash` column to Entry model
+- **Files**: `backend/src/segment/segment_entries.py`, `backend/src/db/models.py`
+- **Migration**: `backend/migrations/002_add_content_hash.sql`
 
 ### 8. Re-enrichment Trigger ✅
 - [x] Add API endpoint to reset entry status to `pending`
 - [x] Add frontend button to trigger re-analysis
 - **Files**: `backend/src/api/main.py`, `frontend/src/pages/DocumentView.jsx`
 
-### 9. Configurable Enrichment Prompt
-- [ ] Move prompt template to config.yaml
-- [ ] Allow custom metadata fields
-- **Files**: `config/config.yaml`, `backend/src/enrich/enrich_entries.py`
+### 9. Configurable Enrichment Prompt ✅
+- [x] Move prompt template to config.yaml
+- [x] Allow custom metadata fields via `custom_fields` in config
+- [x] Add API endpoint to view current enrichment config
+- **Files**: `config/config.yaml`, `backend/src/enrich/enrich_entries.py`, `backend/src/api/main.py`
 
 ### 10. Progress Tracking for All Stages ✅
 - [x] Add progress file for enrichment phase

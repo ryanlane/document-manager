@@ -3,11 +3,12 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import os
 import json
 
 from src.db.session import get_db
-from src.db.models import RawFile, Entry
+from src.db.models import RawFile, Entry, DocumentLink
 from src.rag.search import search_entries_semantic
 from src.llm_client import generate_text, list_models, OLLAMA_URL, MODEL, EMBEDDING_MODEL
 import requests
@@ -432,3 +433,133 @@ def re_enrich_file(file_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"message": f"Reset {count} entries for file {file_id} for re-enrichment"}
+
+@app.get("/config/enrichment")
+def get_enrichment_config():
+    """Get current enrichment configuration for transparency/education."""
+    import yaml
+    import os
+    
+    config_path = os.environ.get("CONFIG_PATH", "/app/config/config.yaml")
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        enrichment = config.get('enrichment', {})
+        return {
+            "prompt_template": enrichment.get('prompt_template', '(using default prompt)'),
+            "max_text_length": enrichment.get('max_text_length', 4000),
+            "custom_fields": enrichment.get('custom_fields', []),
+            "model": config.get('ollama', {}).get('model', 'unknown')
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "prompt_template": "(config not available)",
+            "max_text_length": 4000,
+            "custom_fields": [],
+            "model": "unknown"
+        }
+
+# ============================================================================
+# Link Extraction & Related Documents
+# ============================================================================
+
+@app.get("/files/{file_id}/links")
+def get_file_links(file_id: int, db: Session = Depends(get_db)):
+    """Get all links extracted from a file."""
+    file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    links = db.query(DocumentLink).filter(DocumentLink.file_id == file_id).all()
+    
+    return {
+        "file_id": file_id,
+        "file_path": file.path,
+        "link_count": len(links),
+        "links": [
+            {
+                "id": link.id,
+                "url": link.url,
+                "link_text": link.link_text,
+                "link_type": link.link_type,
+                "domain": link.domain
+            }
+            for link in links
+        ]
+    }
+
+@app.get("/files/{file_id}/related")
+def get_related_files(file_id: int, db: Session = Depends(get_db)):
+    """Find files that share common domains/links with this file."""
+    file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Get domains from this file
+    file_domains = db.query(DocumentLink.domain).filter(
+        DocumentLink.file_id == file_id,
+        DocumentLink.domain.isnot(None)
+    ).distinct().all()
+    domains = [d[0] for d in file_domains]
+    
+    if not domains:
+        return {"file_id": file_id, "related_files": [], "shared_domains": []}
+    
+    # Find other files that share these domains
+    related = db.query(
+        RawFile.id,
+        RawFile.path,
+        RawFile.filename,
+        func.count(DocumentLink.id).label('shared_link_count')
+    ).join(DocumentLink).filter(
+        DocumentLink.domain.in_(domains),
+        RawFile.id != file_id
+    ).group_by(RawFile.id).order_by(func.count(DocumentLink.id).desc()).limit(20).all()
+    
+    return {
+        "file_id": file_id,
+        "shared_domains": domains,
+        "related_files": [
+            {
+                "id": r.id,
+                "path": r.path,
+                "filename": r.filename,
+                "shared_link_count": r.shared_link_count
+            }
+            for r in related
+        ]
+    }
+
+@app.get("/links/stats")
+def get_link_stats(db: Session = Depends(get_db)):
+    """Get overall statistics about extracted links."""
+    total_links = db.query(func.count(DocumentLink.id)).scalar()
+    files_with_links = db.query(func.count(func.distinct(DocumentLink.file_id))).scalar()
+    unique_domains = db.query(func.count(func.distinct(DocumentLink.domain))).filter(
+        DocumentLink.domain.isnot(None)
+    ).scalar()
+    
+    # Top domains
+    top_domains = db.query(
+        DocumentLink.domain,
+        func.count(DocumentLink.id).label('count')
+    ).filter(
+        DocumentLink.domain.isnot(None)
+    ).group_by(DocumentLink.domain).order_by(func.count(DocumentLink.id).desc()).limit(20).all()
+    
+    # Link types breakdown
+    link_types = db.query(
+        DocumentLink.link_type,
+        func.count(DocumentLink.id).label('count')
+    ).group_by(DocumentLink.link_type).all()
+    
+    return {
+        "total_links": total_links,
+        "files_with_links": files_with_links,
+        "unique_domains": unique_domains,
+        "top_domains": [{"domain": d.domain, "count": d.count} for d in top_domains],
+        "link_types": {lt.link_type: lt.count for lt in link_types}
+    }

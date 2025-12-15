@@ -1,13 +1,15 @@
 import logging
 import re
-from typing import List, Dict, Any
+import hashlib
+from typing import List, Dict, Any, Tuple
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from src.db.session import get_db
-from src.db.models import RawFile, Entry
+from src.db.models import RawFile, Entry, DocumentLink
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -117,6 +119,92 @@ def extract_markdown_context(text: str) -> str:
         context_parts.append(f"### {current_h3}")
     
     return '\n'.join(context_parts)
+
+
+def extract_links_from_text(text: str) -> List[Dict[str, str]]:
+    """
+    Extract all links/URLs from text content.
+    Returns list of dicts with 'url', 'link_text', 'link_type', 'domain'.
+    """
+    links = []
+    seen_urls = set()
+    
+    def add_link(url: str, link_text: str, link_type: str):
+        """Helper to add unique links."""
+        url = url.strip()
+        if url in seen_urls or not url:
+            return
+        seen_urls.add(url)
+        
+        # Extract domain
+        domain = None
+        try:
+            if url.startswith(('http://', 'https://')):
+                parsed = urlparse(url)
+                domain = parsed.netloc.lower()
+            elif url.startswith('mailto:'):
+                domain = url.split('@')[-1].split('?')[0] if '@' in url else None
+        except Exception:
+            pass
+        
+        links.append({
+            'url': url,
+            'link_text': link_text[:500] if link_text else None,  # Truncate long text
+            'link_type': link_type,
+            'domain': domain
+        })
+    
+    # 1. HTML href links: <a href="...">text</a>
+    html_link_pattern = r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>([^<]*)</a>'
+    for match in re.finditer(html_link_pattern, text, re.IGNORECASE):
+        add_link(match.group(1), match.group(2), 'html_href')
+    
+    # 2. Markdown links: [text](url)
+    markdown_link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+    for match in re.finditer(markdown_link_pattern, text):
+        add_link(match.group(2), match.group(1), 'markdown')
+    
+    # 3. Raw URLs (http/https)
+    raw_url_pattern = r'(?<!["\'>])https?://[^\s<>"\')\]]+[^\s<>"\')\].,:;!?]'
+    for match in re.finditer(raw_url_pattern, text):
+        url = match.group(0)
+        # Skip if already captured as HTML or markdown
+        if url not in seen_urls:
+            add_link(url, None, 'raw_url')
+    
+    # 4. Email addresses
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    for match in re.finditer(email_pattern, text):
+        email = f"mailto:{match.group(0)}"
+        add_link(email, match.group(0), 'email')
+    
+    return links
+
+
+def save_links_for_file(db: Session, file_id: int, links: List[Dict[str, str]]) -> int:
+    """
+    Save extracted links to the database for a file.
+    Returns count of links saved.
+    """
+    if not links:
+        return 0
+    
+    # Clear existing links for this file
+    db.query(DocumentLink).filter(DocumentLink.file_id == file_id).delete()
+    
+    # Insert new links
+    for link_data in links:
+        link = DocumentLink(
+            file_id=file_id,
+            url=link_data['url'],
+            link_text=link_data['link_text'],
+            link_type=link_data['link_type'],
+            domain=link_data['domain']
+        )
+        db.add(link)
+    
+    db.commit()
+    return len(links)
 
 
 def find_last_headers_before(text: str, position: int) -> str:
@@ -279,6 +367,13 @@ def heuristic_split(text: str, is_html: bool = False, is_markdown: bool = False)
     
     return segments
 
+def compute_content_hash(text: str) -> str:
+    """Compute SHA256 hash of normalized text for deduplication."""
+    # Normalize: lowercase, strip whitespace, collapse multiple spaces
+    normalized = ' '.join(text.lower().split())
+    return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
 def segment_file(db: Session, file: RawFile):
     logger.info(f"Segmenting file {file.id}: {file.path}")
     
@@ -291,6 +386,12 @@ def segment_file(db: Session, file: RawFile):
     ext = file.extension.lower()
     is_html = ext in ['.html', '.htm']
     is_markdown = ext in ['.md', '.markdown']
+    
+    # Extract and save links from the raw text
+    links = extract_links_from_text(file.raw_text)
+    if links:
+        link_count = save_links_for_file(db, file.id, links)
+        logger.info(f"Extracted {link_count} links from file {file.id}")
     
     segments = heuristic_split(file.raw_text, is_html=is_html, is_markdown=is_markdown)
     
@@ -307,20 +408,35 @@ def segment_file(db: Session, file: RawFile):
             return
 
     new_entries = []
+    skipped_duplicates = 0
+    
     for i, seg in enumerate(segments):
+        # Compute hash for deduplication
+        content_hash = compute_content_hash(seg['text'])
+        
+        # Check if this exact content already exists
+        existing = db.query(Entry).filter(Entry.content_hash == content_hash).first()
+        if existing:
+            logger.debug(f"Skipping duplicate segment (hash: {content_hash[:16]}...)")
+            skipped_duplicates += 1
+            continue
+        
         entry = Entry(
             file_id=file.id,
             entry_index=i,
             char_start=seg['start'],
             char_end=seg['end'],
             entry_text=seg['text'],
+            content_hash=content_hash,
             status='pending'
         )
         new_entries.append(entry)
     
-    db.add_all(new_entries)
-    db.commit()
-    logger.info(f"Created {len(new_entries)} entries for file {file.id}")
+    if new_entries:
+        db.add_all(new_entries)
+        db.commit()
+    
+    logger.info(f"Created {len(new_entries)} entries for file {file.id} (skipped {skipped_duplicates} duplicates)")
 
 def main():
     db = next(get_db())

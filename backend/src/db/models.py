@@ -23,6 +23,29 @@ class RawFile(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     entries = relationship("Entry", back_populates="raw_file", cascade="all, delete-orphan")
+    links = relationship("DocumentLink", back_populates="raw_file", cascade="all, delete-orphan")
+
+
+class DocumentLink(Base):
+    """Stores extracted links/URLs from documents for relationship mapping."""
+    __tablename__ = 'document_links'
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    file_id = Column(BigInteger, ForeignKey('raw_files.id', ondelete='CASCADE'), nullable=False)
+    url = Column(Text, nullable=False)
+    link_text = Column(Text)  # The anchor text if available
+    link_type = Column(Text)  # 'html_href', 'markdown', 'raw_url', 'email'
+    domain = Column(Text)  # Extracted domain for grouping
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    raw_file = relationship("RawFile", back_populates="links")
+
+    __table_args__ = (
+        Index('document_links_file_idx', 'file_id'),
+        Index('document_links_url_idx', 'url'),
+        Index('document_links_domain_idx', 'domain'),
+    )
+
 
 class Entry(Base):
     __tablename__ = 'entries'
@@ -33,6 +56,7 @@ class Entry(Base):
     char_start = Column(Integer)
     char_end = Column(Integer)
     entry_text = Column(Text, nullable=False)
+    content_hash = Column(Text)  # SHA256 hash of entry_text for deduplication
 
     title = Column(Text)
     author = Column(Text)
@@ -55,4 +79,5 @@ class Entry(Base):
     __table_args__ = (
         Index('entries_file_idx', 'file_id'),
         Index('entries_search_idx', 'search_vector', postgresql_using='gin'),
+        Index('entries_content_hash_idx', 'content_hash'),
     )

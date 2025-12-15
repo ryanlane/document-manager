@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+import yaml
 from datetime import datetime
 from typing import List
 
@@ -17,8 +18,10 @@ logger = logging.getLogger(__name__)
 # Progress tracking
 SHARED_DIR = "/app/shared"
 ENRICH_PROGRESS_FILE = os.path.join(SHARED_DIR, "enrich_progress.json")
+CONFIG_FILE = "/app/config/config.yaml"
 
-ENRICH_PROMPT_TEMPLATE = """
+# Default prompt template (fallback if config not found)
+DEFAULT_PROMPT_TEMPLATE = """
 You are a document archivist. Analyze the following text and extract metadata in JSON format.
 Return ONLY the JSON object.
 
@@ -32,6 +35,35 @@ Fields required:
 Text:
 {text}
 """
+
+def load_enrichment_config():
+    """Load enrichment configuration from config.yaml."""
+    config = {
+        'prompt_template': DEFAULT_PROMPT_TEMPLATE,
+        'max_text_length': 4000,
+        'custom_fields': []
+    }
+    
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                yaml_config = yaml.safe_load(f)
+                if yaml_config and 'enrichment' in yaml_config:
+                    enrichment = yaml_config['enrichment']
+                    if 'prompt_template' in enrichment:
+                        config['prompt_template'] = enrichment['prompt_template']
+                    if 'max_text_length' in enrichment:
+                        config['max_text_length'] = enrichment['max_text_length']
+                    if 'custom_fields' in enrichment:
+                        config['custom_fields'] = enrichment['custom_fields']
+                    logger.info("Loaded enrichment config from config.yaml")
+    except Exception as e:
+        logger.warning(f"Failed to load config.yaml, using defaults: {e}")
+    
+    return config
+
+# Load config once at module level
+ENRICHMENT_CONFIG = load_enrichment_config()
 
 def update_search_vector(db: Session, entry_id: int):
     sql = text("""
@@ -75,7 +107,10 @@ def extract_category_from_path(path: str) -> str:
 def enrich_entry(db: Session, entry: Entry):
     logger.info(f"Enriching entry {entry.id} (attempt {(entry.retry_count or 0) + 1})...")
     
-    prompt = ENRICH_PROMPT_TEMPLATE.format(text=entry.entry_text[:4000]) # Limit context window
+    # Use config for prompt and text length
+    max_length = ENRICHMENT_CONFIG['max_text_length']
+    prompt_template = ENRICHMENT_CONFIG['prompt_template']
+    prompt = prompt_template.format(text=entry.entry_text[:max_length])
     
     metadata = generate_json(prompt)
     
