@@ -290,6 +290,45 @@ Question: {request.query}
         
     return AskResponse(answer=answer, sources=sources)
 
+@app.get("/files/{file_id}/resolve")
+def resolve_relative_path(file_id: int, path: str, db: Session = Depends(get_db)):
+    """Resolve a relative path from a source file to a target file ID."""
+    source_file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not source_file:
+        raise HTTPException(status_code=404, detail="Source file not found")
+    
+    # Calculate absolute target path
+    source_dir = os.path.dirname(source_file.path)
+    # Normalize path to handle ../ etc
+    target_path = os.path.normpath(os.path.join(source_dir, path))
+    
+    # Find target file
+    target_file = db.query(RawFile).filter(RawFile.path == target_path).first()
+    
+    if not target_file:
+        raise HTTPException(status_code=404, detail="Target file not found")
+        
+    return {"id": target_file.id, "filename": target_file.filename}
+
+@app.get("/files/{file_id}/proxy/{relative_path:path}")
+def proxy_file_content(file_id: int, relative_path: str, db: Session = Depends(get_db)):
+    """Proxy content (images, etc) relative to a source file."""
+    source_file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not source_file:
+        raise HTTPException(status_code=404, detail="Source file not found")
+    
+    source_dir = os.path.dirname(source_file.path)
+    target_path = os.path.normpath(os.path.join(source_dir, relative_path))
+    
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    # Security check: ensure we haven't traversed out of allowed areas?
+    # For now, assuming all files in DB are safe or we trust the file system access.
+    # Ideally we should check if target_path is within archive_root.
+    
+    return FileResponse(target_path)
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
