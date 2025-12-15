@@ -5,6 +5,7 @@ import DocumentView from './pages/DocumentView'
 import Files from './pages/Files'
 import Dashboard from './pages/Dashboard'
 import Logs from './pages/Logs'
+import ResolveLink from './pages/ResolveLink'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/document/:id" element={<DocumentView />} />
+          <Route path="/resolve" element={<ResolveLink />} />
         </Routes>
       </div>
     </Router>

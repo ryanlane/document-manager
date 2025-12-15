@@ -45,9 +45,24 @@ function DocumentView() {
     const links = doc.getElementsByTagName('a')
     Array.from(links).forEach(link => {
       const href = link.getAttribute('href')
-      if (href && href.includes('asstr.org')) {
+      if (!href) return
+
+      if (href.includes('asstr.org')) {
         const newHref = href.replace(/^https?:\/\/(www\.)?asstr\.org/, '')
         link.setAttribute('href', newHref || '/')
+      } else if (!href.match(/^(https?:|mailto:|#)/)) {
+        // Relative link - rewrite to use resolver
+        link.setAttribute('href', `/resolve?from=${id}&to=${encodeURIComponent(href)}`)
+      }
+    })
+
+    // Transform images
+    const images = doc.getElementsByTagName('img')
+    Array.from(images).forEach(img => {
+      const src = img.getAttribute('src')
+      if (src && !src.match(/^(https?:|data:)/)) {
+        // Relative image - rewrite to use proxy
+        img.setAttribute('src', `/api/files/${id}/proxy/${src}`)
       }
     })
 
