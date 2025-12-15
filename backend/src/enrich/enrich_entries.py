@@ -60,6 +60,32 @@ def enrich_entry(db: Session, entry: Entry):
             entry.title = os.path.splitext(entry.raw_file.filename)[0]
 
         entry.author = metadata.get("author")
+
+        # Fallback to folder structure for author if missing
+        # Example path: .../story/authors/John Doe/story.txt
+        if not entry.author and entry.raw_file:
+            try:
+                # Normalize path separators
+                path = entry.raw_file.path.replace('\\', '/')
+                path_parts = path.split('/')
+                
+                # Look for 'authors' directory
+                # We iterate in reverse to find the deepest 'authors' folder if nested (unlikely but safe)
+                if 'authors' in path_parts:
+                    # Find the index of 'authors'
+                    idx = path_parts.index('authors')
+                    # The author name should be the next part
+                    if idx + 1 < len(path_parts):
+                        candidate_author = path_parts[idx + 1]
+                        # Avoid using the filename itself if it's directly under authors (unlikely based on description, but possible)
+                        # If the path is .../authors/John Doe/story.txt, candidate is "John Doe"
+                        # If the path is .../authors/story.txt, candidate is "story.txt" - we probably don't want that.
+                        # Usually authors have their own folder.
+                        if candidate_author != entry.raw_file.filename:
+                            entry.author = candidate_author
+            except Exception as e:
+                logger.warning(f"Failed to extract author from path: {e}")
+
         entry.summary = metadata.get("summary")
         entry.tags = metadata.get("tags", [])
         

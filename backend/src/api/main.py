@@ -244,7 +244,7 @@ def get_file_details(file_id: int, db: Session = Depends(get_db)):
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest, db: Session = Depends(get_db)):
     # 1. Search
-    results = search_entries_semantic(db, request.query, k=request.k)
+    results = search_entries_semantic(db, request.query, k=request.k, filters=request.filters)
     
     if not results:
         return AskResponse(answer="I couldn't find any relevant documents in the archive.", sources=[])

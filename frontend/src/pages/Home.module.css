@@ -40,6 +40,38 @@
   align-items: center;
 }
 
+.advancedBtn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  margin-right: auto; /* Push to left */
+}
+
+.advancedBtn:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.advancedFilters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.advancedFilters input,
+.advancedFilters select {
+  width: 100%;
+  padding: 0.5em;
+  font-size: var(--font-size-sm);
+}
+
 .modelSelect {
   min-width: 140px;
   background: var(--color-bg);

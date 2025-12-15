@@ -6,30 +6,48 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from src.db.session import get_db
-from src.db.models import Entry
+from src.db.models import Entry, RawFile
 from src.llm_client import embed_text
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def search_entries_semantic(db: Session, query: str, k: int = 5) -> List[Tuple[Entry, float]]:
+def search_entries_semantic(db: Session, query: str, k: int = 5, filters: dict = None) -> List[Entry]:
     q_emb = embed_text(query)
     if not q_emb:
         logger.error("Failed to embed query")
         return []
     
-    # Use pgvector's <-> operator (L2 distance) or <=> (Cosine distance)
-    # Usually cosine distance is better for embeddings.
-    # Note: pgvector's <=> is cosine distance.
-    # We want to order by distance ASC.
+    # Start building the query
+    stmt = db.query(Entry).join(RawFile)
     
-    # SQLAlchemy with pgvector:
-    # .order_by(Entry.embedding.cosine_distance(q_emb))
+    # Apply Filters
+    if filters:
+        # Filter by Tags (Postgres Array Overlap)
+        if filters.get('tags') and len(filters['tags']) > 0:
+            stmt = stmt.filter(Entry.tags.overlap(filters['tags']))
+            
+        # Filter by Author (Case-insensitive partial match)
+        if filters.get('author'):
+            stmt = stmt.filter(Entry.author.ilike(f"%{filters['author']}%"))
+            
+        # Filter by File Extension
+        if filters.get('extension'):
+            stmt = stmt.filter(RawFile.extension == filters['extension'])
+
+        # Filter by Date Range (created_hint)
+        if filters.get('date_start'):
+            stmt = stmt.filter(Entry.created_hint >= filters['date_start'])
+        if filters.get('date_end'):
+            stmt = stmt.filter(Entry.created_hint <= filters['date_end'])
+
+    # Hybrid Search Boost:
+    # If the query contains specific keywords, we can use the search_vector to narrow down 
+    # or we can just rely on the vector distance. 
+    # For now, let's keep it simple: The filters narrow the scope, the vector sorts by relevance.
     
-    results = db.query(Entry).order_by(Entry.embedding.cosine_distance(q_emb)).limit(k).all()
+    results = stmt.order_by(Entry.embedding.cosine_distance(q_emb)).limit(k).all()
     
-    # If we want the distance, we need to select it.
-    # But for now just returning entries is fine.
     return results
 
 def main():

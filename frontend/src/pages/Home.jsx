@@ -8,7 +8,13 @@ function Home() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState(null)
-  const [selectedModel, setSelectedModel] = useState('')
+  const [selectedModel, setSelectedModel] = useState(localStorage.getItem('archive_brain_model') || '')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [filters, setFilters] = useState({
+    author: '',
+    tags: '',
+    extension: ''
+  })
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -17,7 +23,9 @@ function Home() {
       .then(data => {
         setStatus(data)
         if (data.ollama && data.ollama.chat_model) {
-          setSelectedModel(data.ollama.chat_model)
+          if (!localStorage.getItem('archive_brain_model')) {
+            setSelectedModel(data.ollama.chat_model)
+          }
         }
       })
       .catch(err => console.error("Failed to fetch status", err))
@@ -30,6 +38,11 @@ function Home() {
     setLoading(true)
     setResult(null)
 
+    const activeFilters = {}
+    if (filters.author) activeFilters.author = filters.author
+    if (filters.extension) activeFilters.extension = filters.extension
+    if (filters.tags) activeFilters.tags = filters.tags.split(',').map(t => t.trim()).filter(Boolean)
+
     try {
       const response = await fetch('/api/ask', {
         method: 'POST',
@@ -39,7 +52,8 @@ function Home() {
         body: JSON.stringify({ 
           query, 
           k: 5,
-          model: selectedModel 
+          model: selectedModel,
+          filters: Object.keys(activeFilters).length > 0 ? activeFilters : null
         }),
       })
       
@@ -70,10 +84,21 @@ function Home() {
         />
         
         <div className={styles.searchControls}>
+          <button 
+            type="button" 
+            className={styles.advancedBtn}
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? 'Hide Filters' : 'Advanced Filters'}
+          </button>
+
           {status && status.ollama.available_models && (
             <select 
               value={selectedModel} 
-              onChange={(e) => setSelectedModel(e.target.value)}
+              onChange={(e) => {
+                setSelectedModel(e.target.value)
+                localStorage.setItem('archive_brain_model', e.target.value)
+              }}
               className={styles.modelSelect}
               title="Select Chat Model"
             >
@@ -87,6 +112,32 @@ function Home() {
             {loading ? 'Thinking...' : <Search size={20} />}
           </button>
         </div>
+
+        {showAdvanced && (
+          <div className={styles.advancedFilters}>
+            <input 
+              type="text" 
+              placeholder="Author (e.g. John Doe)"
+              value={filters.author}
+              onChange={e => setFilters({...filters, author: e.target.value})}
+            />
+            <input 
+              type="text" 
+              placeholder="Tags (comma separated)"
+              value={filters.tags}
+              onChange={e => setFilters({...filters, tags: e.target.value})}
+            />
+            <select 
+              value={filters.extension}
+              onChange={e => setFilters({...filters, extension: e.target.value})}
+            >
+              <option value="">All File Types</option>
+              <option value=".txt">Text (.txt)</option>
+              <option value=".html">HTML (.html)</option>
+              <option value=".md">Markdown (.md)</option>
+            </select>
+          </div>
+        )}
       </form>
 
       {result && (
