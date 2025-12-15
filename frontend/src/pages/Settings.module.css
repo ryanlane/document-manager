@@ -1,0 +1,1277 @@
+.container {
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.75rem;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+}
+
+.header p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 4rem;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.tab.active {
+  color: var(--accent-color);
+  border-bottom-color: var(--accent-color);
+}
+
+/* Section */
+.section {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.section h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.section h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.5rem 0 1rem;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.section h3:first-of-type {
+  margin-top: 0;
+}
+
+.description {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem 0;
+  line-height: 1.5;
+}
+
+/* Provider Selection */
+.providerSelect {
+  margin-bottom: 1.5rem;
+}
+
+.providerSelect label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.providerButtons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.providerBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-primary);
+}
+
+.providerBtn:hover {
+  border-color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
+.providerBtn.selected {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+.providerBtn span {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.providerBtn small {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Provider Config */
+.providerConfig {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.providerConfig h3 {
+  margin: 0 0 1rem 0;
+}
+
+/* Connection Status */
+.connectionStatus {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.connectionStatus.connected {
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success-color) 40%, transparent);
+}
+
+.connectionStatus.disconnected {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error-color) 40%, transparent);
+}
+
+.statusIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.connected .statusIcon {
+  background: color-mix(in srgb, var(--success-color) 25%, transparent);
+  color: var(--success-color);
+}
+
+.disconnected .statusIcon {
+  background: color-mix(in srgb, var(--error-color) 25%, transparent);
+  color: var(--error-color);
+}
+
+.statusInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.statusMain {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.statusDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.statusDetails code {
+  background: var(--bg-primary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.statusDetails span {
+  padding: 0.125rem 0.375rem;
+  background: var(--bg-primary);
+  border-radius: 4px;
+}
+
+.statusError {
+  color: var(--error-color) !important;
+  background: color-mix(in srgb, var(--error-color) 15%, transparent) !important;
+}
+
+.refreshStatusBtn {
+  padding: 0.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.refreshStatusBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Server Presets */
+.serverPresets {
+  margin-bottom: 1rem;
+}
+
+.serverPresets > label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.serverPresets > small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.serverPresets > small strong {
+  color: var(--text-primary);
+}
+
+.presetButtons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.presetBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  min-width: 80px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.presetBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.presetBtn.active {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.presetBtn span {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.presetBtn small {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+/* Form Groups */
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.formGroup input,
+.formGroup select {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 20%, transparent);
+}
+
+.formGroup small {
+  display: block;
+  margin-top: 0.375rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.formGroup small a {
+  color: var(--accent-color);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+/* API Key Input */
+.apiKeyInput {
+  display: flex;
+  gap: 0;
+}
+
+.apiKeyInput input {
+  border-radius: 6px 0 0 6px;
+  flex: 1;
+}
+
+.apiKeyInput button {
+  padding: 0 0.875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.apiKeyInput button:hover {
+  color: var(--text-primary);
+}
+
+/* Notes */
+.note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--warning-color) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning-color) 30%, transparent);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+.note svg {
+  color: var(--warning-color);
+  flex-shrink: 0;
+}
+
+/* Test Result */
+.testResult {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.testResult span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.testResult small {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin-left: 1.75rem;
+}
+
+.testResult.connected,
+.testResult.success {
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success-color) 30%, transparent);
+  color: var(--success-color);
+}
+
+.testResult.error {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error-color) 30%, transparent);
+  color: var(--error-color);
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.testBtn,
+.saveBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.testBtn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.testBtn:hover:not(:disabled) {
+  border-color: var(--accent-color);
+}
+
+.saveBtn {
+  background: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  color: white;
+}
+
+.saveBtn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.testBtn:disabled,
+.saveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Source Folders */
+.folderList {
+  margin-bottom: 2rem;
+}
+
+.folderList h3 {
+  margin: 0 0 1rem 0;
+  font-size: 0.95rem;
+}
+
+.folderItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.folderInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status.ok {
+  background: color-mix(in srgb, var(--success-color) 20%, transparent);
+  color: var(--success-color);
+}
+
+.status.missing {
+  background: color-mix(in srgb, var(--error-color) 20%, transparent);
+  color: var(--error-color);
+}
+
+.path {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.25rem 0.625rem;
+  background: var(--bg-primary);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.removeBtn {
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.removeBtn:hover {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  color: var(--error-color);
+}
+
+.addFolder {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.addFolder input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.addFolder button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.2s;
+  white-space: nowrap;
+}
+
+.addFolder button:hover {
+  filter: brightness(1.1);
+}
+
+.hint {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+/* Exclude Patterns */
+.excludeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.excludeItem {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.625rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.excludeItem code {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.excludeItem button {
+  padding: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 2px;
+  display: flex;
+}
+
+.excludeItem button:hover {
+  color: var(--error-color);
+}
+
+.addExclude {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.addExclude input {
+  flex: 1;
+  max-width: 300px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.addExclude button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.addExclude button:hover {
+  border-color: var(--accent-color);
+}
+
+/* Extensions */
+.extensionCategories {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.category h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.extGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.extToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.extToggle:hover {
+  border-color: var(--accent-color);
+}
+
+.extToggle:has(input:checked) {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  border-color: var(--accent-color);
+}
+
+.extToggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent-color);
+}
+
+.extToggle span {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.customExt {
+  margin-bottom: 1.5rem;
+}
+
+.customExt h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.addExt {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.addExt input {
+  width: 120px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.addExt button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.addExt button:hover {
+  border-color: var(--accent-color);
+}
+
+.currentExt {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.currentExt h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.extList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.extBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--accent-color);
+  color: white;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.extBadge button {
+  padding: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: flex;
+}
+
+.extBadge button:hover {
+  color: white;
+}
+
+/* Model Selector Styles */
+.urlInputRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.urlInputRow input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.urlInputRow button {
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.urlInputRow button:hover:not(:disabled) {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.installedModels {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.installedModels h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.modelChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.modelChip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.chipName {
+  font-family: monospace;
+  color: var(--text-primary);
+}
+
+.chipSize {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.chipCaps {
+  display: flex;
+  gap: 2px;
+  font-size: 0.7rem;
+}
+
+.deleteChip {
+  padding: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  opacity: 0.5;
+  transition: all 0.2s;
+}
+
+.modelChip:hover .deleteChip {
+  opacity: 1;
+}
+
+.deleteChip:hover {
+  color: var(--error-color);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+}
+
+.modelSelectors {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.modelSelector {
+  position: relative;
+}
+
+.modelSelector > label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.modelSelector > small {
+  display: block;
+  margin-top: 0.375rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.modelSelectRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.modelSelectRow select {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.modelSelectRow select.modelMissing {
+  border-color: var(--warning-color);
+}
+
+.downloadBtn {
+  padding: 0.625rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  transition: all 0.2s;
+}
+
+.downloadBtn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.modelWarning {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  color: var(--warning-color);
+  font-size: 0.8rem;
+}
+
+.modelWarning button {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+}
+
+.downloadPanel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.5rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.downloadHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+}
+
+.downloadHeader h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.downloadHeader button {
+  padding: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  border-radius: 4px;
+}
+
+.downloadHeader button:hover {
+  background: var(--bg-hover);
+}
+
+.customModelRow {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.customModelRow input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.customModelRow input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.customModelHint {
+  display: block;
+  padding: 0 1rem 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.customModelHint a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.customModelHint a:hover {
+  text-decoration: underline;
+}
+
+.popularModelsHeader {
+  padding: 0.75rem 1rem 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.popularModels {
+  padding: 0.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.popularModel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.popularModel:hover {
+  background: var(--bg-hover);
+}
+
+.popularModel.downloaded {
+  opacity: 0.7;
+}
+
+.modelInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.modelName {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modelDesc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.modelSize {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.installedBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--success-color);
+  padding: 0.375rem 0.625rem;
+}
+
+.errorBadge {
+  font-size: 0.8rem;
+  color: var(--error-color);
+  padding: 0.375rem 0.625rem;
+}
+
+.pullBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: filter 0.2s;
+}
+
+.pullBtn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.pullBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pullProgress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  min-width: 120px;
+}
+
+.progressBar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressBar div {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.3s;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .providerButtons {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    flex: 1;
+    min-width: 100px;
+    justify-content: center;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .addFolder {
+    flex-direction: column;
+  }
+
+  .addFolder button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modelSelectRow {
+    flex-wrap: wrap;
+  }
+
+  .modelSelectRow select {
+    flex: 1 1 100%;
+  }
+
+  .downloadPanel {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    max-height: 60vh;
+  }
+}

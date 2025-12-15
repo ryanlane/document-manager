@@ -16,11 +16,22 @@ sources:
 
 # File extensions to process
 extensions:
+  # Text files
   - ".txt"
   - ".md"
   - ".html"
+  # Documents
   - ".pdf"
   - ".docx"
+  # Images (OCR + Vision AI)
+  - ".jpg"
+  - ".jpeg"
+  - ".png"
+  - ".gif"
+  - ".webp"
+  - ".bmp"
+  - ".tiff"
+  - ".tif"
 
 # Database configuration (matches docker-compose)
 database:
@@ -33,9 +44,11 @@ database:
 # LLM Configuration
 llm:
   provider: "ollama"
-  base_url: "http://host.docker.internal:11434"
+  # Default: containerized Ollama. Override via OLLAMA_URL env var for external
+  base_url: "http://ollama:11434"
   model: "dolphin-phi"
   embedding_model: "nomic-embed-text"
+  vision_model: "llava"
 
 # Enrichment Configuration
 enrichment:

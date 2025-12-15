@@ -1,0 +1,19 @@
+# GPU Override for Ollama
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Requirements:
+# - NVIDIA GPU with CUDA support
+# - NVIDIA Container Toolkit installed
+#   (https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+#
+# This override enables GPU acceleration for much faster LLM inference.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

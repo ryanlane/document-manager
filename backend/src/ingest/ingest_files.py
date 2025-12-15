@@ -14,6 +14,14 @@ from sqlalchemy.dialects.postgresql import insert
 from src.config import load_config
 from src.db.models import RawFile, detect_series_info
 from src.db.session import get_db
+from src.extract.extractors import (
+    extract_file_content, 
+    generate_thumbnail, 
+    get_file_type,
+    IMAGE_EXTENSIONS,
+    PDF_EXTENSIONS,
+    TEXT_EXTENSIONS,
+)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -62,19 +70,12 @@ def compute_sha256(file_path: Path) -> str:
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def extract_text(file_path: Path, extension: str) -> Optional[str]:
-    # Simple extraction for now
-    try:
-        if extension in ['.txt', '.md', '.html', '.json', '.yaml', '.yml', '.py', '.js', '.ts', '.sql']:
-            text = file_path.read_text(errors='ignore')
-            # PostgreSQL cannot store NUL (0x00) characters in text fields
-            return text.replace('\x00', '')
-        else:
-            # TODO: Integrate Tika for PDF, DOCX, etc.
-            return None
-    except Exception as e:
-        logger.error(f"Failed to extract text from {file_path}: {e}")
-        return None
+def extract_text(file_path: Path, extension: str) -> tuple:
+    """
+    Extract text from file using appropriate method based on file type.
+    Returns (raw_text, file_type, metadata_dict).
+    """
+    return extract_file_content(file_path, extension)
 
 def should_process(file_path: Path, include_exts: Set[str], exclude_patterns: List[str]) -> bool:
     if file_path.suffix.lower() not in include_exts:
@@ -149,27 +150,40 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
                 logger.info(f"[DRY RUN] Would update {file_path} (content changed)")
                 return "skipped"
             
-            raw_text = extract_text(file_path, extension)
-            if raw_text is None:
+            raw_text, file_type, extract_meta = extract_text(file_path, extension)
+            if not raw_text and file_type not in ('image',):  # Images may have no OCR text
                 logger.warning(f"Could not extract text for {file_path}")
-                raw_text = ""
                 existing_by_path.status = "extract_failed"
             else:
                 existing_by_path.status = "ok"
             
             existing_by_path.sha256 = sha256
-            existing_by_path.raw_text = raw_text
+            existing_by_path.raw_text = raw_text or ""
             existing_by_path.size_bytes = size_bytes
             existing_by_path.mtime = mtime
-            logger.info(f"Updated {file_path} (content changed)")
+            existing_by_path.file_type = file_type
+            
+            # Update image/PDF specific fields
+            if file_type == 'image':
+                existing_by_path.ocr_text = raw_text
+                existing_by_path.image_width = extract_meta.get('image_width')
+                existing_by_path.image_height = extract_meta.get('image_height')
+                # Generate thumbnail
+                thumbnail = generate_thumbnail(file_path, sha256)
+                if thumbnail:
+                    existing_by_path.thumbnail_path = thumbnail
+            elif file_type == 'pdf':
+                if extract_meta.get('is_scanned'):
+                    existing_by_path.ocr_text = raw_text
+            
+            logger.info(f"Updated {file_path} (content changed, type: {file_type})")
             db.commit()
             return "updated"
         
         # Truly new file - insert
-        raw_text = extract_text(file_path, extension)
-        if raw_text is None:
+        raw_text, file_type, extract_meta = extract_text(file_path, extension)
+        if not raw_text and file_type not in ('image',):  # Images may have no OCR text
             logger.warning(f"Could not extract text for {file_path}, storing metadata only")
-            raw_text = ""
             status = "extract_failed"
         else:
             status = "ok"
@@ -180,6 +194,11 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
 
         # Detect series information from filename
         series_info = detect_series_info(file_path.name)
+        
+        # Generate thumbnail for images and PDFs
+        thumbnail_path = None
+        if file_type in ('image', 'pdf'):
+            thumbnail_path = generate_thumbnail(file_path, sha256)
 
         new_file = RawFile(
             path=path_str,
@@ -188,17 +207,22 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
             size_bytes=size_bytes,
             mtime=mtime,
             sha256=sha256,
-            raw_text=raw_text,
+            raw_text=raw_text or "",
             status=status,
+            file_type=file_type,
+            thumbnail_path=thumbnail_path,
+            ocr_text=raw_text if file_type == 'image' else (raw_text if file_type == 'pdf' and extract_meta.get('is_scanned') else None),
+            image_width=extract_meta.get('image_width'),
+            image_height=extract_meta.get('image_height'),
             series_name=series_info.get('series_name'),
             series_number=series_info.get('series_number'),
             series_total=series_info.get('series_total')
         )
         db.add(new_file)
         if series_info.get('series_name'):
-            logger.info(f"Ingested {file_path} (Series: {series_info.get('series_name')} #{series_info.get('series_number')})")
+            logger.info(f"Ingested {file_path} (type: {file_type}, Series: {series_info.get('series_name')} #{series_info.get('series_number')})")
         else:
-            logger.info(f"Ingested {file_path}")
+            logger.info(f"Ingested {file_path} (type: {file_type})")
         db.commit()
         return "new"
 

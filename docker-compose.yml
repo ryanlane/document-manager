@@ -2,9 +2,9 @@ services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: archive_brain
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-archive_brain}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -35,6 +35,51 @@ services:
           cpus: '1'
           memory: 512M
 
+  # Ollama LLM service - self-contained inference
+  # For GPU support, see docker-compose.gpu.yml override
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - archive_net
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '8'
+          memory: 16G
+        reservations:
+          cpus: '2'
+          memory: 4G
+
+  # Model initialization - pulls required models on first run
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - archive_net
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Pulling required models..."
+        ollama pull nomic-embed-text
+        ollama pull dolphin-phi
+        ollama pull llava
+        echo "Models ready!"
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    restart: "no"
+
   worker:
     build: ./backend
     volumes:
@@ -47,22 +92,26 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=password
-      - DB_NAME=archive_brain
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-archive_brain}
       - TIKA_URL=http://tika:9998
-      - OLLAMA_URL=http://host.docker.internal:11434
-      - OLLAMA_MOCK=false
-      - OLLAMA_MODEL=dolphin-phi
-      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+      # Use containerized Ollama by default, can override with external URL
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-dolphin-phi}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-llava}
     depends_on:
-      - db
-      - tika
+      ollama:
+        condition: service_healthy
+      db:
+        condition: service_started
+      tika:
+        condition: service_started
     command: python -m src.worker_loop
     networks:
       - archive_net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     # Resource allocation - worker gets most resources for heavy processing
     deploy:
       resources:
@@ -87,28 +136,32 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=password
-      - DB_NAME=archive_brain
-      - OLLAMA_URL=http://host.docker.internal:11434
-      - OLLAMA_MOCK=false
-      - OLLAMA_MODEL=dolphin-phi
-      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-archive_brain}
+      # Use containerized Ollama by default, can override with external URL
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-dolphin-phi}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-llava}
     depends_on:
-      - db
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+      ollama:
+        condition: service_healthy
+      db:
+        condition: service_started
+    # Use multiple workers for better concurrency, watchfiles for hot reload
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4 --timeout-keep-alive 30
     networks:
       - archive_net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '4'
+          memory: 4G
         reservations:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '1'
+          memory: 512M
 
   frontend:
     build: ./frontend
@@ -125,6 +178,7 @@ services:
 volumes:
   postgres_data:
   worker_shared:
+  ollama_models:
 
 networks:
   archive_net:

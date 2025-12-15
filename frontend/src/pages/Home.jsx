@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, BookOpen, FileText, Server } from 'lucide-react'
+import { Search, BookOpen, FileText, Server, Info, Zap, Type, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import styles from './Home.module.css'
 
@@ -10,6 +10,9 @@ function Home() {
   const [status, setStatus] = useState(null)
   const [selectedModel, setSelectedModel] = useState(localStorage.getItem('archive_brain_model') || '')
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showExplainer, setShowExplainer] = useState(false)
+  const [searchMode, setSearchMode] = useState(localStorage.getItem('search_mode') || 'hybrid')
+  const [searchExplanation, setSearchExplanation] = useState(null)
   const [filters, setFilters] = useState({
     author: '',
     tags: '',
@@ -38,6 +41,7 @@ function Home() {
 
     setLoading(true)
     setResult(null)
+    setSearchExplanation(null)
 
     const activeFilters = {}
     if (filters.author) activeFilters.author = filters.author
@@ -46,6 +50,13 @@ function Home() {
     if (filters.tags) activeFilters.tags = filters.tags.split(',').map(t => t.trim()).filter(Boolean)
 
     try {
+      // Fetch explained search results if explainer is on
+      if (showExplainer) {
+        const explainRes = await fetch(`/api/search/explain?query=${encodeURIComponent(query)}&k=5&mode=${searchMode}`)
+        const explainData = await explainRes.json()
+        setSearchExplanation(explainData)
+      }
+
       const response = await fetch('/api/ask', {
         method: 'POST',
         headers: {
@@ -55,7 +66,8 @@ function Home() {
           query, 
           k: 5,
           model: selectedModel,
-          filters: Object.keys(activeFilters).length > 0 ? activeFilters : null
+          filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
+          search_mode: searchMode
         }),
       })
       
@@ -67,6 +79,11 @@ function Home() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSearchModeChange = (mode) => {
+    setSearchMode(mode)
+    localStorage.setItem('search_mode', mode)
   }
 
   return (
@@ -91,7 +108,16 @@ function Home() {
             className={styles.advancedBtn}
             onClick={() => setShowAdvanced(!showAdvanced)}
           >
-            {showAdvanced ? 'Hide Filters' : 'Advanced Filters'}
+            {showAdvanced ? 'Hide Filters' : 'Filters'}
+          </button>
+          
+          <button 
+            type="button" 
+            className={`${styles.advancedBtn} ${showExplainer ? styles.explainerActive : ''}`}
+            onClick={() => setShowExplainer(!showExplainer)}
+            title="Show detailed search explanation"
+          >
+            <Info size={14} /> {showExplainer ? 'Hide Explainer' : 'Explain Search'}
           </button>
 
           {status && status.ollama.available_models && (
@@ -113,6 +139,37 @@ function Home() {
           <button type="submit" disabled={loading} className={styles.searchButton}>
             {loading ? 'Thinking...' : <Search size={20} />}
           </button>
+        </div>
+
+        {/* Search Mode Selector */}
+        <div className={styles.searchModeRow}>
+          <span className={styles.searchModeLabel}>Search Mode:</span>
+          <div className={styles.searchModeButtons}>
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${searchMode === 'vector' ? styles.active : ''}`}
+              onClick={() => handleSearchModeChange('vector')}
+              title="Semantic search using vector embeddings"
+            >
+              <Zap size={14} /> Semantic
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${searchMode === 'keyword' ? styles.active : ''}`}
+              onClick={() => handleSearchModeChange('keyword')}
+              title="Traditional keyword matching (BM25)"
+            >
+              <Type size={14} /> Keyword
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${searchMode === 'hybrid' ? styles.active : ''}`}
+              onClick={() => handleSearchModeChange('hybrid')}
+              title="Combines semantic (70%) and keyword (30%) search"
+            >
+              <Layers size={14} /> Hybrid
+            </button>
+          </div>
         </div>
 
         {showAdvanced && (
@@ -181,6 +238,62 @@ function Home() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Search Explainer Display */}
+      {showExplainer && searchExplanation && (
+        <div className={styles.explainerCard}>
+          <h3><Info size={18} /> Search Explanation</h3>
+          
+          <div className={styles.explainerSection}>
+            <h4>Query Analysis</h4>
+            <p><strong>Your query:</strong> "{searchExplanation.query}"</p>
+            <p><strong>Search mode:</strong> {searchExplanation.search_mode}</p>
+            {searchExplanation.search_mode === 'hybrid' && (
+              <p className={styles.explainerNote}>
+                Hybrid mode combines semantic similarity (70%) with keyword matching (30%)
+              </p>
+            )}
+          </div>
+
+          {searchExplanation.results && searchExplanation.results.length > 0 && (
+            <div className={styles.explainerSection}>
+              <h4>Result Scores</h4>
+              <div className={styles.scoreTable}>
+                <div className={styles.scoreHeader}>
+                  <span>Document</span>
+                  <span>Similarity</span>
+                  {searchExplanation.search_mode === 'hybrid' && <span>Keyword Score</span>}
+                </div>
+                {searchExplanation.results.map((r, i) => (
+                  <div key={i} className={styles.scoreRow}>
+                    <span className={styles.scoreTitle}>{r.title || r.filename}</span>
+                    <span className={styles.scoreValue}>
+                      {(r.similarity_score * 100).toFixed(1)}%
+                    </span>
+                    {searchExplanation.search_mode === 'hybrid' && (
+                      <span className={styles.scoreValue}>
+                        {r.bm25_score ? r.bm25_score.toFixed(2) : 'N/A'}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className={styles.explainerSection}>
+            <h4>How This Works</h4>
+            <p>
+              {searchExplanation.search_mode === 'vector' && 
+                "Your query was converted into a 768-dimensional vector using the embedding model, then compared against document vectors using cosine similarity."}
+              {searchExplanation.search_mode === 'keyword' && 
+                "Traditional keyword matching using BM25 algorithm to find documents containing your search terms."}
+              {searchExplanation.search_mode === 'hybrid' && 
+                "Combined semantic understanding (vector similarity) with keyword matching for better accuracy."}
+            </p>
+          </div>
         </div>
       )}
 

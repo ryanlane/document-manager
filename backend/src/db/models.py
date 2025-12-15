@@ -71,6 +71,19 @@ class RawFile(Base):
     meta_json = Column(JSONB)
     status = Column(Text, default='ok')  # 'ok', 'extract_failed', 'skipped'
     
+    # File type classification
+    file_type = Column(Text, default='text')  # 'text', 'image', 'pdf', 'document'
+    
+    # Image/PDF specific fields
+    thumbnail_path = Column(Text)  # Relative path to thumbnail image
+    ocr_text = Column(Text)  # Text extracted via OCR (for images/scanned PDFs)
+    vision_description = Column(Text)  # AI-generated description from vision model
+    vision_model = Column(Text)  # Which vision model was used
+    
+    # Image metadata
+    image_width = Column(Integer)
+    image_height = Column(Integer)
+    
     # Series detection fields
     series_name = Column(Text)  # Detected series name
     series_number = Column(Integer)  # Part/chapter number in series
@@ -84,6 +97,7 @@ class RawFile(Base):
     
     __table_args__ = (
         Index('raw_files_series_idx', 'series_name'),
+        Index('raw_files_file_type_idx', 'file_type'),
     )
 
 

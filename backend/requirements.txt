@@ -8,3 +8,8 @@ pgvector
 tika
 fastapi
 uvicorn
+# Image and PDF processing
+Pillow
+pytesseract
+PyMuPDF
+pdf2image

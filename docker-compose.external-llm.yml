@@ -1,0 +1,34 @@
+# External LLM Override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.external-llm.yml up
+#
+# Use this when you want to connect to an external Ollama instance
+# (e.g., running on the host with GPU support) instead of the containerized one.
+#
+# Set OLLAMA_URL in your .env file:
+#   OLLAMA_URL=http://host.docker.internal:11434
+
+services:
+  # Disable containerized Ollama
+  ollama:
+    profiles:
+      - disabled
+  
+  ollama-init:
+    profiles:
+      - disabled
+
+  worker:
+    depends_on:
+      db:
+        condition: service_started
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  api:
+    depends_on:
+      db:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

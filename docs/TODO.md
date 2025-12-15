@@ -4,7 +4,46 @@
 
 ---
 
-## 🎓 Educational & Transparency Features (NEW)
+## 📁 File Type Support
+
+### F1. Image Support ✅
+- [x] OCR text extraction using Tesseract
+- [x] Vision model integration (llava, llama3.2-vision) for AI descriptions
+- [x] Thumbnail generation for gallery view
+- [x] Image metadata extraction (dimensions, format)
+- [x] Gallery page with grid view, lightbox, filtering
+- [x] Batch analysis endpoint for processing multiple images
+- **Files**: `backend/src/extract/extractors.py`, `backend/src/llm_client.py`, `frontend/src/pages/Gallery.jsx`
+- **Extensions**: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.tiff`
+
+### F2. PDF Support ✅
+- [x] Text extraction using PyMuPDF
+- [x] OCR fallback for scanned PDFs
+- [x] PDF metadata extraction (title, author, page count)
+- [x] Thumbnail generation (first page)
+- **Files**: `backend/src/extract/extractors.py`
+
+### F3. Document Support (Planned)
+- [ ] DOCX/DOC support via python-docx
+- [ ] ODT support via odfpy
+- [ ] RTF support
+- **Files**: `backend/src/extract/extractors.py`
+
+### F4. Spreadsheet Support (Planned)
+- [ ] XLSX/XLS support via openpyxl
+- [ ] CSV parsing with intelligent column detection
+- [ ] ODS support
+- **Files**: New `backend/src/extract/spreadsheets.py`
+
+### F5. E-book Support (Planned)
+- [ ] EPUB support via ebooklib
+- [ ] MOBI support
+- [ ] Chapter-aware segmentation
+- **Files**: New `backend/src/extract/ebooks.py`
+
+---
+
+## 🎓 Educational & Transparency Features
 
 ### E1. Pipeline Visualization Dashboard
 - [ ] Visual flowchart showing data flow: File → Segments → Enriched → Embedded → Searchable
@@ -28,20 +67,20 @@
 - [ ] Show which other entries are "nearby" in vector space
 - **Files**: New `frontend/src/pages/EntryInspector.jsx`
 
-### E4. Search Explainer
-- [ ] When searching, show WHY each result matched
-- [ ] Display similarity scores for each result
+### E4. Search Explainer ✅
+- [x] When searching, show WHY each result matched
+- [x] Display similarity scores for each result
 - [ ] Show the query embedding vs result embeddings (visual comparison)
-- [ ] Explain the difference between semantic search and keyword search
-- [ ] Option to toggle between vector-only, keyword-only, and hybrid search
-- **Files**: `frontend/src/pages/Home.jsx`, `backend/src/rag/search.py`
+- [x] Explain the difference between semantic search and keyword search
+- [x] Option to toggle between vector-only, keyword-only, and hybrid search
+- **Files**: `frontend/src/pages/Home.jsx`, `backend/src/rag/search.py`, `backend/src/api/main.py`
 
-### E5. LLM Prompt Transparency
-- [ ] Show the enrichment prompt template on a dedicated "How It Works" page
+### E5. LLM Prompt Transparency ✅
+- [x] Show the enrichment prompt template on a dedicated "How It Works" page
 - [ ] Allow editing the prompt and seeing how it affects results (sandbox mode)
 - [ ] Display token counts for prompts and responses
-- [ ] Show model name and parameters used for each call
-- **Files**: New `frontend/src/pages/HowItWorks.jsx`
+- [x] Show model name and parameters used for each call
+- **Files**: `frontend/src/pages/HowItWorks.jsx`
 
 ### E6. Embedding Visualizer
 - [ ] 2D/3D scatter plot of all embeddings using t-SNE or UMAP
@@ -65,18 +104,18 @@
 - [ ] Interactive tooltips explaining each transformation
 - **Files**: New `frontend/src/pages/Walkthrough.jsx`
 
-### E9. Glossary & Documentation
-- [ ] In-app glossary of terms (embedding, vector, semantic search, RAG, etc.)
+### E9. Glossary & Documentation ✅
+- [x] In-app glossary of terms (embedding, vector, semantic search, RAG, etc.)
 - [ ] Tooltips throughout the UI explaining concepts
 - [ ] Links to relevant documentation/papers
-- [ ] "Learn more" expandable sections on each page
-- **Files**: New `frontend/src/components/Glossary.jsx`
+- [x] "Learn more" expandable sections on each page
+- **Files**: `frontend/src/pages/HowItWorks.jsx` (includes glossary section)
 
-### E10. Vector Space Distance Calculator
-- [ ] Tool to compare two pieces of text and see their similarity score
-- [ ] Show how changing words affects the embedding distance
-- [ ] Demonstrate why semantic search finds related content even with different words
-- **Files**: New endpoint + frontend component
+### E10. Vector Space Distance Calculator ✅
+- [x] Tool to compare two pieces of text and see their similarity score
+- [x] Show how changing words affects the embedding distance
+- [x] Demonstrate why semantic search finds related content even with different words
+- **Files**: `backend/src/api/main.py` (`/similarity` endpoint), `frontend/src/pages/HowItWorks.jsx` (Similarity Calculator)
 
 ---
 

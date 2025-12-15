@@ -3,6 +3,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import text
 from src.db.session import engine
 from src.db.models import Base
+# Import Setting to ensure it's registered with Base
+from src.db.settings import Setting
 
 def init_db():
     print("Creating database tables...")
