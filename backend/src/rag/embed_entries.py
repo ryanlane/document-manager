@@ -11,10 +11,20 @@ logger = logging.getLogger(__name__)
 def embed_entry(db: Session, entry: Entry):
     logger.info(f"Embedding entry {entry.id}...")
     
-    # Combine title and text for embedding? Or just text?
-    # Plan says "embed_text(text)".
-    # Usually title + text is better.
-    text_to_embed = f"{entry.title or ''}\n\n{entry.entry_text}"
+    # Construct a rich context for embedding to get the best semantic representation
+    parts = []
+    if entry.title:
+        parts.append(f"Title: {entry.title}")
+    if entry.author:
+        parts.append(f"Author: {entry.author}")
+    if entry.tags:
+        parts.append(f"Tags: {', '.join(entry.tags)}")
+    if entry.summary:
+        parts.append(f"Summary: {entry.summary}")
+    
+    parts.append(f"Content:\n{entry.entry_text}")
+    
+    text_to_embed = "\n".join(parts)
     
     embedding = embed_text(text_to_embed)
     
