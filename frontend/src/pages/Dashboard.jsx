@@ -283,6 +283,7 @@ function Dashboard() {
                 style={{ width: `${enrichedPct}%`, backgroundColor: '#ffc517' }}
               ></div>
             </div>
+            <p className={styles.metricSub}>AI Analysis</p>
           </div>
         </div>
 
@@ -300,6 +301,7 @@ function Dashboard() {
                 style={{ width: `${embeddedPct}%`, backgroundColor: '#ff6464' }}
               ></div>
             </div>
+            <p className={styles.metricSub}>Vector Index</p>
           </div>
         </div>
       </div>

@@ -225,11 +225,19 @@ def main():
     except Exception as e:
         logger.warning(f"Could not build path cache: {e}")
     
-    # Phase 1: Count files to process
-    update_progress("counting", 0, 0)
-    logger.info("Counting files to process...")
-    files_to_process = []
-    count = 0
+    # Single Pass: Scan and Process
+    # We removed the separate counting phase to speed up the loop.
+    # Total is unknown initially, so we just track count.
+    
+    new_files = 0
+    updated_files = 0
+    skipped_files = 0
+    errors = 0
+    processed_count = 0
+    
+    logger.info("Scanning and processing files...")
+    update_progress("scanning", 0, 0)
+
     for root in include_paths:
         if not root.exists():
             logger.warning(f"Source root {root} does not exist")
@@ -240,80 +248,64 @@ def main():
                 continue
                 
             if should_process(file_path, include_exts, exclude_patterns):
-                files_to_process.append(file_path)
-                count += 1
-                if count % 1000 == 0:
+                # Process immediately
+                result = ingest_file(db, file_path, dry_run=args.dry_run, path_cache=path_cache)
+                processed_count += 1
+                
+                if result == "new":
+                    new_files += 1
+                    try:
+                        stat = file_path.stat()
+                        path_cache[str(file_path)] = {
+                            'mtime': datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                            'size': stat.st_size
+                        }
+                    except:
+                        pass
+                elif result == "updated":
+                    updated_files += 1
+                    try:
+                        stat = file_path.stat()
+                        path_cache[str(file_path)] = {
+                            'mtime': datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                            'size': stat.st_size
+                        }
+                    except:
+                        pass
+                elif result == "skipped":
+                    skipped_files += 1
+                elif result == "error":
+                    errors += 1
+                
+                # Update progress periodically
+                if processed_count % 100 == 0:
                     if check_stop_signal():
-                        logger.info("Ingest paused by user request during counting.")
+                        logger.info("Ingest paused by user request.")
                         update_progress("idle", 0, 0)
                         return
-                    update_progress("counting", count, 0, current_file=str(file_path.name)[:50])
+                    
+                    # We don't know total, so we pass 0 or processed_count as total to avoid div/0 in UI if it calculates %
+                    # Or we can just pass processed_count as current and 0 as total.
+                    update_progress(
+                        phase="scanning",
+                        current=processed_count,
+                        total=0, # Unknown total
+                        new_files=new_files,
+                        updated_files=updated_files,
+                        skipped_files=skipped_files,
+                        current_file=str(file_path.name)[:50]
+                    )
 
-                if args.limit and len(files_to_process) >= args.limit:
+                if args.limit and processed_count >= args.limit:
                     break
-        if args.limit and len(files_to_process) >= args.limit:
+        if args.limit and processed_count >= args.limit:
             break
-    
-    total = len(files_to_process)
-    logger.info(f"Found {total} files to process")
-    
-    # Phase 2: Process files with progress tracking
-    new_files = 0
-    updated_files = 0
-    skipped_files = 0
-    errors = 0
-    
-    for i, file_path in enumerate(files_to_process):
-        result = ingest_file(db, file_path, dry_run=args.dry_run, path_cache=path_cache)
-        
-        if result == "new":
-            new_files += 1
-            # Update cache with new file
-            try:
-                stat = file_path.stat()
-                path_cache[str(file_path)] = {
-                    'mtime': datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-                    'size': stat.st_size
-                }
-            except:
-                pass
-        elif result == "updated":
-            updated_files += 1
-            # Update cache
-            try:
-                stat = file_path.stat()
-                path_cache[str(file_path)] = {
-                    'mtime': datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-                    'size': stat.st_size
-                }
-            except:
-                pass
-        elif result == "skipped":
-            skipped_files += 1
-        elif result == "error":
-            errors += 1
-        
-        # Update progress every 100 files or at key milestones (reduced frequency for speed)
-        if i % 100 == 0 or i == total - 1:
-            if check_stop_signal():
-                logger.info("Ingest paused by user request during scanning.")
-                update_progress("idle", 0, 0)
-                return
-            update_progress(
-                phase="scanning",
-                current=i + 1,
-                total=total,
-                new_files=new_files,
-                updated_files=updated_files,
-                skipped_files=skipped_files,
-                current_file=str(file_path.name)[:50]
-            )
     
     # Mark as complete
     update_progress(
         phase="complete",
-        current=total,
-        total=total,
+        current=processed_count,
+        total=processed_count,
         new_files=new_files,
         updated_files=updated_files,
         skipped_files=skipped_files,

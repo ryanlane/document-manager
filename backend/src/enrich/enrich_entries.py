@@ -101,6 +101,10 @@ def enrich_entry(db: Session, entry: Entry):
             entry.extra_meta['created_hint_raw'] = created_hint_str
         
         entry.status = 'enriched'
+        
+        # Clear existing embedding to force re-embedding with new metadata
+        entry.embedding = None
+        
         db.commit()
         
         # Update search vector

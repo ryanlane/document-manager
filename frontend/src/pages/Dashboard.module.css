@@ -98,7 +98,79 @@
 
 /* Progress Section */
 .progressSection {
-  border: 2px solid var(--color-primary);
+  margin-bottom: var(--spacing-lg);
+}
+
+/* Pipeline Steps */
+.pipelineSteps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.step {
+  flex: 1;
+  background: var(--color-bg);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-sm);
+  opacity: 0.7;
+  transition: all 0.3s ease;
+}
+
+.step.active {
+  opacity: 1;
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.stepIcon {
+  color: var(--color-text-muted);
+}
+
+.step.active .stepIcon {
+  color: var(--color-primary);
+}
+
+.stepContent h4 {
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+
+.stepContent p {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.stepStat {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-weight: bold;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.stepArrow {
+  color: var(--color-text-muted);
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+@media (max-width: 768px) {
+  .pipelineSteps {
+    flex-direction: column;
+  }
+  .stepArrow {
+    transform: rotate(90deg);
+  }
 }
 
 .progressHeader {

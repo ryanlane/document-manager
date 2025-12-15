@@ -73,6 +73,9 @@ def run_pipeline():
     if not os.path.exists(STATE_FILE):
         save_state(get_state())
     
+    last_ingest_time = 0
+    INGEST_INTERVAL = 3600 # 1 hour
+    
     while True:
         state = get_state()
         
@@ -83,9 +86,16 @@ def run_pipeline():
             
         try:
             # 1. Ingest
+            # Only run if enabled AND enough time has passed
             if state.get("ingest", True):
-                logger.info("--- Starting Ingestion Phase ---")
-                ingest_main()
+                current_time = time.time()
+                if current_time - last_ingest_time > INGEST_INTERVAL:
+                    logger.info("--- Starting Ingestion Phase ---")
+                    ingest_main()
+                    last_ingest_time = time.time()
+                else:
+                    # logger.debug("Skipping ingest (interval not reached)")
+                    pass
             
             # 2. Segment
             if state.get("segment", True):

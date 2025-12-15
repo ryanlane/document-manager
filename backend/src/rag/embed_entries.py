@@ -38,11 +38,15 @@ def embed_entry(db: Session, entry: Entry):
 def main():
     db = next(get_db())
     
-    # Process entries without embedding
-    entries = db.query(Entry).filter(Entry.embedding.is_(None)).limit(200).all()
+    # Process entries without embedding that have been enriched
+    # We wait for enrichment to ensure we have the best metadata (title, author, etc.)
+    entries = db.query(Entry).filter(
+        Entry.embedding.is_(None),
+        Entry.status == 'enriched'
+    ).limit(200).all()
     
     if not entries:
-        logger.info("No entries needing embedding found.")
+        logger.info("No enriched entries needing embedding found.")
         return
 
     for entry in entries:
