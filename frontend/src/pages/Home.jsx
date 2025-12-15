@@ -13,7 +13,8 @@ function Home() {
   const [filters, setFilters] = useState({
     author: '',
     tags: '',
-    extension: ''
+    extension: '',
+    category: ''
   })
   const navigate = useNavigate()
 
@@ -41,6 +42,7 @@ function Home() {
     const activeFilters = {}
     if (filters.author) activeFilters.author = filters.author
     if (filters.extension) activeFilters.extension = filters.extension
+    if (filters.category) activeFilters.category = filters.category
     if (filters.tags) activeFilters.tags = filters.tags.split(',').map(t => t.trim()).filter(Boolean)
 
     try {
@@ -126,6 +128,12 @@ function Home() {
               placeholder="Tags (comma separated)"
               value={filters.tags}
               onChange={e => setFilters({...filters, tags: e.target.value})}
+            />
+            <input 
+              type="text" 
+              placeholder="Category (e.g. story, docs)"
+              value={filters.category}
+              onChange={e => setFilters({...filters, category: e.target.value})}
             />
             <select 
               value={filters.extension}

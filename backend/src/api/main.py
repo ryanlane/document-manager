@@ -19,6 +19,8 @@ SHARED_DIR = "/app/shared"
 WORKER_STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 WORKER_LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
 INGEST_PROGRESS_FILE = os.path.join(SHARED_DIR, "ingest_progress.json")
+ENRICH_PROGRESS_FILE = os.path.join(SHARED_DIR, "enrich_progress.json")
+EMBED_PROGRESS_FILE = os.path.join(SHARED_DIR, "embed_progress.json")
 
 class AskRequest(BaseModel):
     query: str
@@ -114,25 +116,27 @@ def get_worker_logs(lines: int = 100):
 
 @app.get("/worker/progress")
 def get_worker_progress():
-    """Get the current ingest progress."""
-    try:
-        if not os.path.exists(INGEST_PROGRESS_FILE):
-            return {
-                "phase": "idle",
-                "current": 0,
-                "total": 0,
-                "percent": 0,
-                "new_files": 0,
-                "updated_files": 0,
-                "skipped_files": 0,
-                "current_file": "",
-                "updated_at": None
-            }
-        
-        with open(INGEST_PROGRESS_FILE, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Get progress for all pipeline phases."""
+    def read_progress(filepath, default_phase):
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {
+            "phase": default_phase,
+            "current": 0,
+            "total": 0,
+            "percent": 0,
+            "updated_at": None
+        }
+    
+    return {
+        "ingest": read_progress(INGEST_PROGRESS_FILE, "idle"),
+        "enrich": read_progress(ENRICH_PROGRESS_FILE, "idle"),
+        "embed": read_progress(EMBED_PROGRESS_FILE, "idle")
+    }
 
 @app.get("/system/status")
 def get_system_status():
@@ -332,3 +336,99 @@ def proxy_file_content(file_id: int, relative_path: str, db: Session = Depends(g
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+# === Entry Management Endpoints ===
+
+@app.get("/entries/failed")
+def get_failed_entries(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+    """Get entries that have failed enrichment (status='error' or hit max retries)."""
+    from sqlalchemy import or_
+    
+    failed = db.query(Entry).filter(
+        or_(Entry.status == 'error', Entry.retry_count >= 3)
+    ).offset(skip).limit(limit).all()
+    
+    total = db.query(Entry).filter(
+        or_(Entry.status == 'error', Entry.retry_count >= 3)
+    ).count()
+    
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": e.id,
+                "file_id": e.file_id,
+                "title": e.title,
+                "status": e.status,
+                "retry_count": e.retry_count,
+                "filename": e.raw_file.filename if e.raw_file else None
+            } for e in failed
+        ]
+    }
+
+@app.post("/entries/{entry_id}/retry")
+def retry_entry(entry_id: int, db: Session = Depends(get_db)):
+    """Reset a failed entry to pending status for re-enrichment."""
+    entry = db.query(Entry).filter(Entry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    entry.status = 'pending'
+    entry.retry_count = 0
+    db.commit()
+    
+    return {"message": f"Entry {entry_id} reset to pending", "id": entry_id}
+
+@app.post("/entries/retry-all-failed")
+def retry_all_failed(db: Session = Depends(get_db)):
+    """Reset all failed entries to pending status."""
+    from sqlalchemy import or_
+    
+    count = db.query(Entry).filter(
+        or_(Entry.status == 'error', Entry.retry_count >= 3)
+    ).update({"status": "pending", "retry_count": 0})
+    
+    db.commit()
+    
+    return {"message": f"Reset {count} failed entries to pending"}
+
+@app.post("/entries/{entry_id}/re-enrich")
+def re_enrich_entry(entry_id: int, db: Session = Depends(get_db)):
+    """Reset an entry for re-enrichment (clears metadata and embedding)."""
+    entry = db.query(Entry).filter(Entry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    entry.status = 'pending'
+    entry.retry_count = 0
+    entry.title = None
+    entry.author = None
+    entry.tags = None
+    entry.summary = None
+    entry.embedding = None
+    entry.category = None
+    db.commit()
+    
+    return {"message": f"Entry {entry_id} queued for re-enrichment", "id": entry_id}
+
+@app.post("/files/{file_id}/re-enrich")
+def re_enrich_file(file_id: int, db: Session = Depends(get_db)):
+    """Reset all entries for a file for re-enrichment."""
+    file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    count = db.query(Entry).filter(Entry.file_id == file_id).update({
+        "status": "pending",
+        "retry_count": 0,
+        "title": None,
+        "author": None,
+        "tags": None,
+        "summary": None,
+        "embedding": None,
+        "category": None
+    })
+    
+    db.commit()
+    
+    return {"message": f"Reset {count} entries for file {file_id} for re-enrichment"}

@@ -34,6 +34,10 @@ def search_entries_semantic(db: Session, query: str, k: int = 5, filters: dict =
         # Filter by File Extension
         if filters.get('extension'):
             stmt = stmt.filter(RawFile.extension == filters['extension'])
+            
+        # Filter by Category
+        if filters.get('category'):
+            stmt = stmt.filter(Entry.category.ilike(f"%{filters['category']}%"))
 
         # Filter by Date Range (created_hint)
         if filters.get('date_start'):

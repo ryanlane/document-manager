@@ -6,7 +6,7 @@ import styles from './Dashboard.module.css'
 function Dashboard() {
   const [metrics, setMetrics] = useState(null)
   const [workerState, setWorkerState] = useState(null)
-  const [ingestProgress, setIngestProgress] = useState(null)
+  const [pipelineProgress, setPipelineProgress] = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
 
@@ -32,11 +32,11 @@ function Dashboard() {
     }
   }
 
-  const fetchIngestProgress = async () => {
+  const fetchPipelineProgress = async () => {
     try {
       const res = await fetch('/api/worker/progress')
       const data = await res.json()
-      setIngestProgress(data)
+      setPipelineProgress(data)
     } catch (err) {
       console.error(err)
     }
@@ -71,10 +71,10 @@ function Dashboard() {
   useEffect(() => {
     fetchMetrics()
     fetchWorkerState()
-    fetchIngestProgress()
+    fetchPipelineProgress()
     const metricsInterval = setInterval(fetchMetrics, 2000)
     const stateInterval = setInterval(fetchWorkerState, 5000)
-    const progressInterval = setInterval(fetchIngestProgress, 1000)
+    const progressInterval = setInterval(fetchPipelineProgress, 1000)
     return () => {
       clearInterval(metricsInterval)
       clearInterval(stateInterval)
@@ -159,75 +159,92 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Ingest Progress */}
-      {ingestProgress && ingestProgress.phase !== 'idle' && (
+      {/* Pipeline Progress */}
+      {pipelineProgress && (
         <div className={`${styles.section} ${styles.progressSection}`}>
-          <div className={styles.progressHeader}>
-            <h2>
-              {ingestProgress.phase === 'loading_cache' && <><RefreshCw size={18} className={styles.spin} /> Loading Cache...</>}
-              {ingestProgress.phase === 'counting' && <><RefreshCw size={18} className={styles.spin} /> Counting Files...</>}
-              {ingestProgress.phase === 'scanning' && <><RefreshCw size={18} className={styles.spin} /> Scanning Files</>}
-              {ingestProgress.phase === 'complete' && <><CheckCircle size={18} color="#42b883" /> Scan Complete</>}
-            </h2>
-            {ingestProgress.phase === 'scanning' && (
-              <span className={styles.progressPct}>{ingestProgress.percent}%</span>
-            )}
-            {ingestProgress.phase === 'counting' && (
-              <span className={styles.progressPct}>{ingestProgress.current.toLocaleString()} found</span>
-            )}
-          </div>
+          <h2 className={styles.sectionTitle}>Pipeline Progress</h2>
           
-          {ingestProgress.phase === 'counting' && (
-             <div className={styles.progressDetails}>
-                <span className={styles.progressCount}>
-                  Found {ingestProgress.current.toLocaleString()} files so far...
-                </span>
-                {ingestProgress.current_file && (
-                  <span className={styles.progressCurrent} title={ingestProgress.current_file}>
-                    ...{ingestProgress.current_file}
-                  </span>
-                )}
-             </div>
+          {/* Ingest Progress */}
+          {pipelineProgress.ingest && pipelineProgress.ingest.phase !== 'idle' && (
+            <div className={styles.phaseProgress}>
+              <div className={styles.progressHeader}>
+                <h3>
+                  <RefreshCw size={16} className={pipelineProgress.ingest.phase !== 'complete' ? styles.spin : ''} />
+                  Ingest: {pipelineProgress.ingest.phase}
+                </h3>
+                <span className={styles.progressPct}>{pipelineProgress.ingest.percent}%</span>
+              </div>
+              {pipelineProgress.ingest.total > 0 && (
+                <div className={`${styles.progressBar} ${styles.large}`}>
+                  <div 
+                    className={styles.progressFill}
+                    style={{ 
+                      width: `${pipelineProgress.ingest.percent}%`, 
+                      backgroundColor: pipelineProgress.ingest.phase === 'complete' ? '#42b883' : '#646cff' 
+                    }}
+                  ></div>
+                </div>
+              )}
+              {pipelineProgress.ingest.current_file && (
+                <div className={styles.progressDetails}>
+                  <span className={styles.progressCurrent}>{pipelineProgress.ingest.current_file}</span>
+                </div>
+              )}
+            </div>
           )}
-
-          {ingestProgress.total > 0 && ingestProgress.phase !== 'counting' && (
-            <>
+          
+          {/* Enrich Progress */}
+          {pipelineProgress.enrich && pipelineProgress.enrich.total > 0 && (
+            <div className={styles.phaseProgress}>
+              <div className={styles.progressHeader}>
+                <h3>
+                  <Layers size={16} className={styles.spin} />
+                  Enriching
+                </h3>
+                <span className={styles.progressPct}>{pipelineProgress.enrich.percent}%</span>
+              </div>
               <div className={`${styles.progressBar} ${styles.large}`}>
                 <div 
                   className={styles.progressFill}
-                  style={{ 
-                    width: `${ingestProgress.percent}%`, 
-                    backgroundColor: ingestProgress.phase === 'complete' ? '#42b883' : '#646cff' 
-                  }}
+                  style={{ width: `${pipelineProgress.enrich.percent}%`, backgroundColor: '#ffc517' }}
                 ></div>
               </div>
-              
               <div className={styles.progressDetails}>
                 <span className={styles.progressCount}>
-                  {ingestProgress.current.toLocaleString()} / {ingestProgress.total.toLocaleString()} files
+                  {pipelineProgress.enrich.current} / {pipelineProgress.enrich.total} entries
                 </span>
-                {ingestProgress.current_file && (
-                  <span className={styles.progressCurrent} title={ingestProgress.current_file}>
-                    {ingestProgress.current_file}
-                  </span>
+                {pipelineProgress.enrich.current_entry && (
+                  <span className={styles.progressCurrent}>{pipelineProgress.enrich.current_entry}</span>
                 )}
               </div>
-              
-              <div className={styles.progressStats}>
-                <div className={`${styles.statItem} ${styles.new}`}>
-                  <FilePlus size={14} />
-                  <span>{ingestProgress.new_files.toLocaleString()} new</span>
-                </div>
-                <div className={`${styles.statItem} ${styles.updated}`}>
-                  <FileEdit size={14} />
-                  <span>{ingestProgress.updated_files.toLocaleString()} updated</span>
-                </div>
-                <div className={`${styles.statItem} ${styles.skipped}`}>
-                  <FileX size={14} />
-                  <span>{ingestProgress.skipped_files.toLocaleString()} unchanged</span>
-                </div>
+            </div>
+          )}
+          
+          {/* Embed Progress */}
+          {pipelineProgress.embed && pipelineProgress.embed.total > 0 && (
+            <div className={styles.phaseProgress}>
+              <div className={styles.progressHeader}>
+                <h3>
+                  <Cpu size={16} className={styles.spin} />
+                  Embedding
+                </h3>
+                <span className={styles.progressPct}>{pipelineProgress.embed.percent}%</span>
               </div>
-            </>
+              <div className={`${styles.progressBar} ${styles.large}`}>
+                <div 
+                  className={styles.progressFill}
+                  style={{ width: `${pipelineProgress.embed.percent}%`, backgroundColor: '#42b883' }}
+                ></div>
+              </div>
+              <div className={styles.progressDetails}>
+                <span className={styles.progressCount}>
+                  {pipelineProgress.embed.current} / {pipelineProgress.embed.total} entries
+                </span>
+                {pipelineProgress.embed.current_entry && (
+                  <span className={styles.progressCurrent}>{pipelineProgress.embed.current_entry}</span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}

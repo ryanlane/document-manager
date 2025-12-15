@@ -1,6 +1,7 @@
 import logging
 import re
 from typing import List, Dict, Any
+from html.parser import HTMLParser
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -11,55 +12,150 @@ from src.db.models import RawFile, Entry
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-MIN_ENTRY_LENGTH = 50  # Filter out very short segments
+# Segmentation configuration
+MIN_ENTRY_LENGTH = 50      # Filter out very short segments
+MAX_ENTRY_LENGTH = 4000    # Target max chars per segment (~1000 tokens)
+OVERLAP_LENGTH = 200       # Overlap between segments for context continuity
 
-def heuristic_split(text: str) -> List[Dict[str, Any]]:
+
+class HTMLTextExtractor(HTMLParser):
+    """Extract plain text from HTML, stripping all tags."""
+    def __init__(self):
+        super().__init__()
+        self.text_parts = []
+        self.skip_tags = {'script', 'style', 'head', 'meta', 'link'}
+        self.current_skip = 0
+    
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in self.skip_tags:
+            self.current_skip += 1
+    
+    def handle_endtag(self, tag):
+        if tag.lower() in self.skip_tags and self.current_skip > 0:
+            self.current_skip -= 1
+    
+    def handle_data(self, data):
+        if self.current_skip == 0:
+            self.text_parts.append(data)
+    
+    def get_text(self):
+        return ' '.join(self.text_parts)
+
+
+def strip_html(text: str) -> str:
+    """Remove HTML tags and return plain text."""
+    try:
+        parser = HTMLTextExtractor()
+        parser.feed(text)
+        return parser.get_text()
+    except Exception:
+        # Fallback: simple regex strip
+        return re.sub(r'<[^>]+>', ' ', text)
+
+def split_large_segment(text: str, max_length: int = MAX_ENTRY_LENGTH) -> List[str]:
+    """
+    Split a large text segment into smaller chunks, respecting sentence boundaries.
+    """
+    if len(text) <= max_length:
+        return [text]
+    
+    chunks = []
+    current_pos = 0
+    
+    while current_pos < len(text):
+        # Find the end position for this chunk
+        end_pos = min(current_pos + max_length, len(text))
+        
+        if end_pos < len(text):
+            # Try to find a sentence boundary (. ! ? followed by space or newline)
+            search_start = max(current_pos + max_length // 2, current_pos)
+            best_break = end_pos
+            
+            for pattern in [r'[.!?]\s', r'\n', r',\s', r';\s']:
+                matches = list(re.finditer(pattern, text[search_start:end_pos]))
+                if matches:
+                    best_break = search_start + matches[-1].end()
+                    break
+            
+            end_pos = best_break
+        
+        chunk = text[current_pos:end_pos].strip()
+        if chunk:
+            chunks.append(chunk)
+        
+        current_pos = end_pos
+    
+    return chunks
+
+
+def heuristic_split(text: str, is_html: bool = False) -> List[Dict[str, Any]]:
     """
     Splits text into segments based on double newlines or separators.
     Returns a list of dicts with 'text', 'start', 'end'.
+    Respects max chunk size and adds overlap between segments.
     """
-    # Simple split by double newlines for now
-    # We want to capture start/end indices.
+    # Strip HTML if needed
+    if is_html:
+        text = strip_html(text)
     
     segments = []
     
     # Regex for splitting: 2+ newlines OR separator lines
-    # Separators: ====, ----, ***
     separator_pattern = r'\n\s*(?:={3,}|-{3,}|\*{3,})\s*\n'
     double_newline_pattern = r'\n\s*\n'
-    
-    # Combine patterns? Or just use double newline as primary, and then check for separators?
-    # Let's use a combined regex to find split points
     split_pattern = f'(?:{separator_pattern})|(?:{double_newline_pattern})'
     
-    # re.finditer is useful here
-    # But we want the text BETWEEN matches.
-    
+    raw_segments = []
     last_end = 0
+    
     for match in re.finditer(split_pattern, text):
         start = last_end
         end = match.start()
-        
         segment_text = text[start:end].strip()
         if len(segment_text) >= MIN_ENTRY_LENGTH:
-            segments.append({
+            raw_segments.append({
                 'text': segment_text,
                 'start': start,
                 'end': end
             })
-        
         last_end = match.end()
     
     # Add the last segment
     if last_end < len(text):
         segment_text = text[last_end:].strip()
         if len(segment_text) >= MIN_ENTRY_LENGTH:
-            segments.append({
+            raw_segments.append({
                 'text': segment_text,
                 'start': last_end,
                 'end': len(text)
             })
+    
+    # Now process each segment: split large ones, add overlap
+    for i, seg in enumerate(raw_segments):
+        seg_text = seg['text']
+        
+        # Split large segments
+        if len(seg_text) > MAX_ENTRY_LENGTH:
+            sub_chunks = split_large_segment(seg_text)
+            for j, chunk in enumerate(sub_chunks):
+                segments.append({
+                    'text': chunk,
+                    'start': seg['start'],  # Approximate
+                    'end': seg['end']
+                })
+        else:
+            # Add overlap from previous segment if exists
+            if OVERLAP_LENGTH > 0 and i > 0:
+                prev_text = raw_segments[i-1]['text']
+                overlap = prev_text[-OVERLAP_LENGTH:] if len(prev_text) > OVERLAP_LENGTH else prev_text
+                seg_text = f"[...] {overlap}\n\n{seg_text}"
             
+            segments.append({
+                'text': seg_text,
+                'start': seg['start'],
+                'end': seg['end']
+            })
+    
     return segments
 
 def segment_file(db: Session, file: RawFile):
@@ -70,7 +166,10 @@ def segment_file(db: Session, file: RawFile):
         logger.info(f"File {file.id} already has {len(file.entries)} entries. Skipping.")
         return
 
-    segments = heuristic_split(file.raw_text)
+    # Detect if HTML based on extension
+    is_html = file.extension.lower() in ['.html', '.htm']
+    
+    segments = heuristic_split(file.raw_text, is_html=is_html)
     
     if not segments:
         logger.warning(f"No segments found for file {file.id}")

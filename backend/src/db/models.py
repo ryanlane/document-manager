@@ -36,6 +36,7 @@ class Entry(Base):
 
     title = Column(Text)
     author = Column(Text)
+    category = Column(Text)  # Extracted from folder structure
     created_hint = Column(DateTime(timezone=True))
     tags = Column(ARRAY(Text))
     summary = Column(Text)
@@ -44,6 +45,7 @@ class Entry(Base):
     search_vector = Column(TSVECTOR)
     embedding = Column(Vector(768)) # Assuming 768 dimensions for standard models (e.g. nomic-embed-text, or llama3 hidden state)
     status = Column(Text, default='pending')  # 'pending', 'enriched', 'error'
+    retry_count = Column(Integer, default=0)  # Track failed enrichment attempts
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

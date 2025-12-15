@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 from src.db.session import get_db
 from src.db.models import Entry
@@ -13,6 +13,10 @@ from src.llm_client import generate_json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Progress tracking
+SHARED_DIR = "/app/shared"
+ENRICH_PROGRESS_FILE = os.path.join(SHARED_DIR, "enrich_progress.json")
 
 ENRICH_PROMPT_TEMPLATE = """
 You are a document archivist. Analyze the following text and extract metadata in JSON format.
@@ -40,16 +44,50 @@ def update_search_vector(db: Session, entry_id: int):
     """)
     db.execute(sql, {"id": entry_id})
 
+# Max retry attempts before marking as error
+MAX_RETRIES = 3
+
+# Known category folders to detect
+CATEGORY_FOLDERS = ['scifi', 'sci-fi', 'fantasy', 'romance', 'horror', 'mystery', 
+                    'thriller', 'drama', 'comedy', 'adventure', 'historical', 
+                    'erotica', 'fiction', 'nonfiction', 'poetry', 'essay']
+
+
+def extract_category_from_path(path: str) -> str:
+    """Extract category/genre from folder structure."""
+    path = path.replace('\\', '/').lower()
+    path_parts = path.split('/')
+    
+    for part in path_parts:
+        if part in CATEGORY_FOLDERS:
+            return part.title()
+    
+    # Also check for patterns like "stories/category_name/"
+    for i, part in enumerate(path_parts):
+        if part in ['stories', 'story', 'docs', 'archive'] and i + 1 < len(path_parts):
+            candidate = path_parts[i + 1]
+            if candidate not in ['authors', 'files', 'data'] and len(candidate) > 2:
+                return candidate.title()
+    
+    return None
+
+
 def enrich_entry(db: Session, entry: Entry):
-    logger.info(f"Enriching entry {entry.id}...")
+    logger.info(f"Enriching entry {entry.id} (attempt {(entry.retry_count or 0) + 1})...")
     
     prompt = ENRICH_PROMPT_TEMPLATE.format(text=entry.entry_text[:4000]) # Limit context window
     
     metadata = generate_json(prompt)
     
     if not metadata:
-        logger.error(f"Failed to enrich entry {entry.id}")
-        # entry.status = 'error' # Optional: mark as error or leave pending to retry
+        # Increment retry count
+        entry.retry_count = (entry.retry_count or 0) + 1
+        if entry.retry_count >= MAX_RETRIES:
+            entry.status = 'error'
+            logger.error(f"Entry {entry.id} failed after {MAX_RETRIES} attempts, marking as error")
+        else:
+            logger.warning(f"Failed to enrich entry {entry.id}, will retry (attempt {entry.retry_count}/{MAX_RETRIES})")
+        db.commit()
         return
 
     try:
@@ -70,21 +108,18 @@ def enrich_entry(db: Session, entry: Entry):
                 path_parts = path.split('/')
                 
                 # Look for 'authors' directory
-                # We iterate in reverse to find the deepest 'authors' folder if nested (unlikely but safe)
                 if 'authors' in path_parts:
-                    # Find the index of 'authors'
                     idx = path_parts.index('authors')
-                    # The author name should be the next part
                     if idx + 1 < len(path_parts):
                         candidate_author = path_parts[idx + 1]
-                        # Avoid using the filename itself if it's directly under authors (unlikely based on description, but possible)
-                        # If the path is .../authors/John Doe/story.txt, candidate is "John Doe"
-                        # If the path is .../authors/story.txt, candidate is "story.txt" - we probably don't want that.
-                        # Usually authors have their own folder.
                         if candidate_author != entry.raw_file.filename:
                             entry.author = candidate_author
             except Exception as e:
                 logger.warning(f"Failed to extract author from path: {e}")
+
+        # Extract category from folder structure
+        if entry.raw_file:
+            entry.category = extract_category_from_path(entry.raw_file.path)
 
         entry.summary = metadata.get("summary")
         entry.tags = metadata.get("tags", [])
@@ -117,17 +152,47 @@ def enrich_entry(db: Session, entry: Entry):
         logger.error(f"Error saving enrichment for entry {entry.id}: {e}")
         db.rollback()
 
+def update_progress(current: int, total: int, entry_title: str = ""):
+    """Update the enrichment progress file."""
+    try:
+        os.makedirs(SHARED_DIR, exist_ok=True)
+        progress = {
+            "phase": "enriching",
+            "current": current,
+            "total": total,
+            "percent": round((current / total) * 100, 1) if total > 0 else 0,
+            "current_entry": entry_title,
+            "updated_at": datetime.now().isoformat()
+        }
+        with open(ENRICH_PROGRESS_FILE, 'w') as f:
+            json.dump(progress, f)
+    except Exception as e:
+        logger.warning(f"Failed to update progress: {e}")
+
 def main():
     db = next(get_db())
     
-    # Process pending entries
-    entries = db.query(Entry).filter(Entry.status == 'pending').limit(10).all() # Batch size 10
+    # Get total pending count for progress tracking
+    from sqlalchemy import or_
+    total_pending = db.query(func.count(Entry.id)).filter(
+        Entry.status == 'pending',
+        or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
+    ).scalar()
+    
+    # Process pending entries that haven't exceeded max retries
+    entries = db.query(Entry).filter(
+        Entry.status == 'pending',
+        or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
+    ).limit(10).all()
     
     if not entries:
         logger.info("No pending entries found.")
+        # Clear progress
+        update_progress(0, 0, "")
         return
 
-    for entry in entries:
+    for i, entry in enumerate(entries):
+        update_progress(i + 1, total_pending, entry.title or f"Entry {entry.id}")
         enrich_entry(db, entry)
 
 if __name__ == "__main__":
