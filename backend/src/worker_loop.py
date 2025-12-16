@@ -39,6 +39,9 @@ from src.enrich.enrich_entries import main as enrich_main
 from src.enrich.enrich_docs import main as enrich_docs_main
 from src.rag.embed_entries import main as embed_main
 from src.rag.embed_docs import main as embed_docs_main
+from src.db.session import SessionLocal
+from src.db.settings import get_llm_config
+from src.llm_client import set_default_client, ensure_models_available
 
 # Re-apply file handler to root logger AFTER imports (child modules may have altered config)
 root_logger = logging.getLogger()
@@ -85,6 +88,10 @@ def run_pipeline():
     last_ingest_time = 0
     INGEST_INTERVAL = 3600 # 1 hour
     
+    # Refresh LLM config from database settings periodically
+    last_config_refresh = 0
+    CONFIG_REFRESH_INTERVAL = 60  # Refresh config every minute
+    
     while True:
         state = get_state()
         
@@ -92,7 +99,24 @@ def run_pipeline():
             logger.info("Worker paused. Sleeping...")
             time.sleep(5)
             continue
-            
+        
+        # Refresh LLM client config from database settings
+        current_time = time.time()
+        if current_time - last_config_refresh > CONFIG_REFRESH_INTERVAL:
+            try:
+                db = SessionLocal()
+                llm_config = get_llm_config(db)
+                
+                # Ensure required models are available (auto-pull if missing)
+                if llm_config.get('provider') == 'ollama':
+                    ensure_models_available(llm_config)
+                
+                set_default_client(llm_config)
+                logger.info(f"Refreshed LLM config: provider={llm_config.get('provider')}, model={llm_config.get('model')}")
+                db.close()
+                last_config_refresh = current_time
+            except Exception as e:
+                logger.warning(f"Failed to refresh LLM config: {e}")
         try:
             # 1. Ingest
             # Only run if enabled AND enough time has passed

@@ -435,9 +435,16 @@ def get_doc_stats(db: Session) -> dict:
     return get_doc_stats_with_eta(db)
 
 @app.get("/system/status")
-def get_system_status():
+def get_system_status(db: Session = Depends(get_db)):
     ollama_status = "offline"
     available_models = []
+    
+    # Get the active LLM config from database settings
+    llm_config = get_llm_config(db)
+    provider = llm_config.get("provider", "ollama")
+    chat_model = llm_config.get("model", MODEL)
+    embedding_model = llm_config.get("embedding_model", EMBEDDING_MODEL)
+    
     try:
         # Simple check to see if Ollama is responding
         resp = requests.get(f"{OLLAMA_URL}", timeout=1)
@@ -451,10 +458,11 @@ def get_system_status():
         "ollama": {
             "status": ollama_status,
             "url": OLLAMA_URL,
-            "chat_model": MODEL,
-            "embedding_model": EMBEDDING_MODEL,
+            "chat_model": chat_model,
+            "embedding_model": embedding_model,
             "available_models": available_models
-        }
+        },
+        "provider": provider
     }
 
 # ==================== Lightweight Metrics Endpoints ====================

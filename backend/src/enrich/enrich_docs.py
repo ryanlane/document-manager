@@ -20,6 +20,7 @@ from sqlalchemy import text, func
 
 from src.db.session import SessionLocal
 from src.db.models import RawFile
+from src.db.settings import get_llm_config
 from src.llm_client import LLMClient
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -115,7 +116,10 @@ def enrich_docs_batch(limit: int = DOC_ENRICH_BATCH_SIZE) -> int:
     Returns the number of documents successfully enriched.
     """
     db = SessionLocal()
-    llm_client = LLMClient()
+    
+    # Get LLM config from database settings
+    llm_config = get_llm_config(db)
+    llm_client = LLMClient(llm_config)
     enriched_count = 0
     
     try:

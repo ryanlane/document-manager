@@ -383,7 +383,7 @@ def set_default_client(config: Dict[str, Any]):
     global _default_client
     _default_client = LLMClient(config)
 
-def generate_json(prompt: str, model: str = MODEL) -> Optional[Dict[str, Any]]:
+def generate_json(prompt: str, model: str = None) -> Optional[Dict[str, Any]]:
     if MOCK_MODE:
         logger.info("Returning MOCK LLM response")
         return {
@@ -393,9 +393,13 @@ def generate_json(prompt: str, model: str = MODEL) -> Optional[Dict[str, Any]]:
             "tags": ["mock", "test"],
             "summary": "This is a mock summary."
         }
-
-    url = f"{OLLAMA_URL}/api/generate"
     
+    # Use the default client if available (which may have db config)
+    client = get_client()
+    if model is None:
+        model = client.ollama_model
+    url = client.ollama_url
+
     payload = {
         "model": model,
         "prompt": prompt,
@@ -404,7 +408,7 @@ def generate_json(prompt: str, model: str = MODEL) -> Optional[Dict[str, Any]]:
     }
     
     try:
-        response = requests.post(url, json=payload, timeout=120)
+        response = requests.post(f"{url}/api/generate", json=payload, timeout=120)
         response.raise_for_status()
         result = response.json()
         response_text = result.get("response", "")
@@ -462,13 +466,14 @@ def generate_text(prompt: str, model: str = MODEL) -> Optional[str]:
         logger.error(f"Ollama text generation failed: {e}")
         return None
 
-def list_models() -> List[str]:
+def list_models(url: str = None) -> List[str]:
     if MOCK_MODE:
         return ["mock-model-1", "mock-model-2"]
-        
-    url = f"{OLLAMA_URL}/api/tags"
+    
+    ollama_url = url or OLLAMA_URL
+    api_url = f"{ollama_url}/api/tags"
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         data = response.json()
         # Extract model names
@@ -476,6 +481,119 @@ def list_models() -> List[str]:
     except requests.RequestException as e:
         logger.error(f"Failed to list Ollama models: {e}")
         return []
+
+
+def model_exists(model_name: str, url: str = None) -> bool:
+    """Check if a model is available in Ollama."""
+    if MOCK_MODE:
+        return True
+    
+    available_models = list_models(url)
+    # Check exact match or base name match (e.g., "phi4-mini:latest" matches "phi4-mini")
+    model_base = model_name.split(':')[0]
+    for m in available_models:
+        if m == model_name or m.split(':')[0] == model_base:
+            return True
+    return False
+
+
+def pull_model(model_name: str, url: str = None) -> bool:
+    """
+    Pull/download a model from Ollama. Blocks until complete.
+    
+    Args:
+        model_name: Name of the model to pull (e.g., "phi4-mini:latest")
+        url: Ollama URL (defaults to OLLAMA_URL)
+    
+    Returns:
+        True if pull succeeded, False otherwise
+    """
+    if MOCK_MODE:
+        return True
+    
+    ollama_url = url or OLLAMA_URL
+    api_url = f"{ollama_url}/api/pull"
+    
+    logger.info(f"Pulling model '{model_name}' from Ollama...")
+    
+    try:
+        # Use streaming to track progress
+        resp = requests.post(
+            api_url,
+            json={"name": model_name, "stream": True},
+            stream=True,
+            timeout=7200  # 2 hour timeout for large models
+        )
+        resp.raise_for_status()
+        
+        last_progress = -1
+        for line in resp.iter_lines():
+            if line:
+                try:
+                    data = json.loads(line)
+                    status = data.get("status", "")
+                    
+                    if "completed" in data and "total" in data and data["total"] > 0:
+                        progress = int(data["completed"] / data["total"] * 100)
+                        # Log progress at 10% intervals
+                        if progress >= last_progress + 10:
+                            logger.info(f"Pulling {model_name}: {progress}% - {status}")
+                            last_progress = progress
+                    elif status == "success":
+                        logger.info(f"Successfully pulled model '{model_name}'")
+                        return True
+                    elif "error" in data:
+                        logger.error(f"Error pulling model: {data.get('error')}")
+                        return False
+                except json.JSONDecodeError:
+                    pass
+        
+        logger.info(f"Successfully pulled model '{model_name}'")
+        return True
+        
+    except requests.RequestException as e:
+        logger.error(f"Failed to pull model '{model_name}': {e}")
+        return False
+
+
+def ensure_models_available(config: Dict[str, Any]) -> bool:
+    """
+    Ensure all configured models are available in Ollama.
+    Pulls missing models automatically.
+    
+    Args:
+        config: LLM config dict with model, embedding_model, etc.
+    
+    Returns:
+        True if all models are available, False if any pull failed
+    """
+    if config.get("provider") != "ollama":
+        return True  # Only applies to Ollama
+    
+    url = config.get("url") or OLLAMA_URL
+    models_to_check = []
+    
+    # Collect models to check
+    if config.get("model"):
+        models_to_check.append(("chat", config["model"]))
+    if config.get("embedding_model"):
+        models_to_check.append(("embedding", config["embedding_model"]))
+    if config.get("vision_model"):
+        models_to_check.append(("vision", config["vision_model"]))
+    
+    all_available = True
+    for model_type, model_name in models_to_check:
+        if not model_exists(model_name, url):
+            logger.warning(f"{model_type.capitalize()} model '{model_name}' not found. Attempting to pull...")
+            if pull_model(model_name, url):
+                logger.info(f"{model_type.capitalize()} model '{model_name}' is now available")
+            else:
+                logger.error(f"Failed to pull {model_type} model '{model_name}'")
+                all_available = False
+        else:
+            logger.debug(f"{model_type.capitalize()} model '{model_name}' is available")
+    
+    return all_available
 
 
 def list_vision_models() -> List[str]:
