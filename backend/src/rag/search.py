@@ -16,6 +16,242 @@ logger = logging.getLogger(__name__)
 SEARCH_MODE_VECTOR = 'vector'
 SEARCH_MODE_KEYWORD = 'keyword'
 SEARCH_MODE_HYBRID = 'hybrid'
+SEARCH_MODE_TWO_STAGE = 'two_stage'
+
+
+def search_docs_stage1(
+    db: Session, 
+    query: str, 
+    query_embedding: List[float],
+    top_n: int = 20,
+    filters: dict = None
+) -> List[dict]:
+    """
+    Stage 1: Search at document level for fast screening.
+    Uses doc_embedding (vector) and doc_search_vector (FTS) for hybrid ranking.
+    Returns top N document IDs with scores.
+    """
+    # Build filter conditions
+    filter_sql = ""
+    params = {
+        "embedding": str(query_embedding),
+        "query": query,
+        "limit": top_n
+    }
+    
+    if filters:
+        if filters.get('author'):
+            filter_sql += " AND rf.author_key ILIKE :author_filter"
+            params['author_filter'] = f"%{filters['author'].lower().replace(' ', '_')}%"
+        if filters.get('source'):
+            filter_sql += " AND rf.source = :source_filter"
+            params['source_filter'] = filters['source']
+        if filters.get('extension'):
+            filter_sql += " AND rf.extension = :ext_filter"
+            params['ext_filter'] = filters['extension']
+    
+    sql = text(f"""
+        WITH doc_vector AS (
+            SELECT rf.id, 
+                   1.0 - (rf.doc_embedding <=> :embedding) as vector_score
+            FROM raw_files rf
+            WHERE rf.doc_embedding IS NOT NULL
+            {filter_sql}
+        ),
+        doc_keyword AS (
+            SELECT rf.id,
+                   COALESCE(ts_rank_cd(rf.doc_search_vector, plainto_tsquery('english', :query)), 0) as keyword_score
+            FROM raw_files rf
+            WHERE rf.doc_search_vector IS NOT NULL
+            {filter_sql}
+        )
+        SELECT 
+            COALESCE(v.id, k.id) as doc_id,
+            COALESCE(v.vector_score, 0) as vector_score,
+            COALESCE(k.keyword_score, 0) as keyword_score,
+            (COALESCE(v.vector_score, 0) * 0.6 + COALESCE(k.keyword_score, 0) * 0.4) as combined_score
+        FROM doc_vector v
+        FULL OUTER JOIN doc_keyword k ON v.id = k.id
+        WHERE COALESCE(v.vector_score, 0) > 0.3 OR COALESCE(k.keyword_score, 0) > 0.01
+        ORDER BY combined_score DESC
+        LIMIT :limit
+    """)
+    
+    results = db.execute(sql, params).fetchall()
+    return [{"doc_id": r[0], "vector_score": r[1], "keyword_score": r[2], "combined_score": r[3]} for r in results]
+
+
+def search_chunks_stage2(
+    db: Session,
+    query: str,
+    query_embedding: List[float],
+    doc_ids: List[int],
+    k: int = 10
+) -> List[Entry]:
+    """
+    Stage 2: Search chunks only within the specified document IDs.
+    Much faster than global search since we're limiting to a small doc set.
+    Falls back to keyword search if chunks don't have embeddings.
+    """
+    if not doc_ids:
+        return []
+    
+    # First try vector + keyword hybrid search on embedded chunks
+    sql = text("""
+        WITH chunk_scores AS (
+            SELECT e.id,
+                   1.0 - (e.embedding <=> :embedding) as vector_score,
+                   COALESCE(ts_rank_cd(e.search_vector, plainto_tsquery('english', :query)), 0) as keyword_score
+            FROM entries e
+            WHERE e.file_id = ANY(:doc_ids)
+              AND e.embedding IS NOT NULL
+        )
+        SELECT id, vector_score, keyword_score,
+               (vector_score * 0.7 + keyword_score * 0.3) as combined_score
+        FROM chunk_scores
+        ORDER BY combined_score DESC
+        LIMIT :limit
+    """)
+    
+    results = db.execute(sql, {
+        "embedding": str(query_embedding),
+        "query": query,
+        "doc_ids": doc_ids,
+        "limit": k
+    }).fetchall()
+    
+    # If no embedded chunks, fall back to keyword-only search within docs
+    if not results:
+        logger.info(f"No embedded chunks in {len(doc_ids)} docs, falling back to keyword search")
+        sql_fallback = text("""
+            SELECT e.id,
+                   0 as vector_score,
+                   COALESCE(ts_rank_cd(e.search_vector, plainto_tsquery('english', :query)), 0) as keyword_score
+            FROM entries e
+            WHERE e.file_id = ANY(:doc_ids)
+            ORDER BY keyword_score DESC, e.id
+            LIMIT :limit
+        """)
+        results = db.execute(sql_fallback, {
+            "query": query,
+            "doc_ids": doc_ids,
+            "limit": k
+        }).fetchall()
+    
+    entry_ids = [r[0] for r in results]
+    if not entry_ids:
+        return []
+    
+    entries = db.query(Entry).filter(Entry.id.in_(entry_ids)).all()
+    
+    # Build score map and sort
+    score_map = {r[0]: {'vector_score': r[1], 'keyword_score': r[2], 'combined_score': r[3] if len(r) > 3 else r[2]} for r in results}
+    entries.sort(key=lambda e: score_map.get(e.id, {}).get('combined_score', 0), reverse=True)
+    
+    # Attach scores
+    for entry in entries:
+        if entry.id in score_map:
+            entry._search_scores = score_map[entry.id]
+    
+    return entries
+
+
+def search_two_stage(
+    db: Session,
+    query: str,
+    k: int = 10,
+    filters: dict = None,
+    stage1_docs: int = 30
+) -> dict:
+    """
+    Two-stage retrieval:
+    1. Search doc-level embeddings to find top N relevant documents
+    2. Search chunks only within those documents
+    
+    This is much faster for large collections since:
+    - Stage 1 searches 125k docs (small)
+    - Stage 2 searches only chunks from ~30 docs instead of 8M chunks
+    
+    Returns dict with:
+    - entries: List[Entry] - the final chunk results
+    - docs: List[dict] - the doc-level matches with scores
+    - stats: timing and count info
+    """
+    import time
+    
+    # Embed query once, reuse for both stages
+    t0 = time.time()
+    query_embedding = embed_text(query)
+    embed_time = time.time() - t0
+    
+    if not query_embedding:
+        logger.error("Failed to embed query, falling back to keyword search")
+        return {
+            "entries": [],
+            "docs": [],
+            "stats": {"error": "embedding_failed"}
+        }
+    
+    # Stage 1: Doc-level search
+    t1 = time.time()
+    doc_results = search_docs_stage1(db, query, query_embedding, stage1_docs, filters)
+    stage1_time = time.time() - t1
+    
+    if not doc_results:
+        # No doc matches, try chunk-level fallback
+        logger.info("No doc-level matches, trying direct chunk search")
+        t2 = time.time()
+        # Fallback to regular hybrid search on all chunks
+        entries = search_entries_semantic(db, query, k, filters, SEARCH_MODE_HYBRID)
+        stage2_time = time.time() - t2
+        return {
+            "entries": entries,
+            "docs": [],
+            "stats": {
+                "mode": "fallback_chunk",
+                "embed_ms": int(embed_time * 1000),
+                "stage1_ms": int(stage1_time * 1000),
+                "stage2_ms": int(stage2_time * 1000),
+                "docs_searched": 0,
+                "total_ms": int((time.time() - t0) * 1000)
+            }
+        }
+    
+    # Stage 2: Chunk search within top docs
+    doc_ids = [d["doc_id"] for d in doc_results]
+    t2 = time.time()
+    entries = search_chunks_stage2(db, query, query_embedding, doc_ids, k)
+    stage2_time = time.time() - t2
+    
+    # Fetch doc metadata for context
+    docs_with_meta = []
+    doc_map = {d.id: d for d in db.query(RawFile).filter(RawFile.id.in_(doc_ids)).all()}
+    for dr in doc_results:
+        doc = doc_map.get(dr["doc_id"])
+        if doc:
+            docs_with_meta.append({
+                "id": doc.id,
+                "filename": doc.filename,
+                "path": doc.path,
+                "doc_summary": doc.doc_summary[:200] if doc.doc_summary else None,
+                "vector_score": dr["vector_score"],
+                "keyword_score": dr["keyword_score"],
+                "combined_score": dr["combined_score"]
+            })
+    
+    return {
+        "entries": entries,
+        "docs": docs_with_meta,
+        "stats": {
+            "mode": "two_stage",
+            "embed_ms": int(embed_time * 1000),
+            "stage1_ms": int(stage1_time * 1000),
+            "stage2_ms": int(stage2_time * 1000),
+            "docs_searched": len(doc_ids),
+            "total_ms": int((time.time() - t0) * 1000)
+        }
+    }
+
 
 def search_keyword_only(db: Session, query: str, k: int = 5, filters: dict = None) -> List[dict]:
     """

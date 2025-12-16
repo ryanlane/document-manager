@@ -10,10 +10,14 @@
 |--------|-------|
 | Total entries (chunks) | 8,244,409 |
 | Total raw_files (docs) | 125,544 |
-| Entries enriched | ~110,000 (1.3%) |
-| Entries embedded | ~15,500 |
+| Docs enriched | 162 (0.1%) |
+| Docs embedded | 3,740 (3.0%) |
+| Docs with summary | 4,940 |
+| Entries enriched | ~111,379 (1.4%) |
+| Entries embedded | ~15,520 |
 | Avg chunks per doc | ~66 |
-| Authors | 4,980 |
+
+**Active Workers**: asgard (3060) + oak (1070 Ti) running doc enrichment @ ~2 docs/sec combined
 
 ---
 
@@ -40,32 +44,36 @@
 
 ## Phase 2: Doc-Level Enrichment 🔄
 
-### 2.1 Create Doc Enrichment Pipeline
-- [ ] Create `backend/src/enrich/enrich_docs.py`
-- [ ] Generate doc_summary from first N chars or representative chunks
-- [ ] Extract doc-level metadata (title, author, themes)
-- [ ] Update `doc_status` to 'enriched'
-- [ ] Lighter prompt than chunk enrichment (faster)
+### 2.1 Create Doc Enrichment Pipeline ✅
+- [x] Create `backend/src/enrich/enrich_docs.py`
+- [x] Generate doc_summary from first N chars or representative chunks
+- [x] Extract doc-level metadata (title, author, themes)
+- [x] Update `doc_status` to 'enriched'
+- [x] Lighter prompt than chunk enrichment (faster)
 
-### 2.2 Create Doc Embedding Pipeline
-- [ ] Create `backend/src/rag/embed_docs.py`
-- [ ] Embed `doc_summary` to `doc_embedding`
-- [ ] Populate `doc_search_vector` for FTS
-- [ ] Update `doc_status` to 'embedded'
+### 2.2 Create Doc Embedding Pipeline ✅
+- [x] Create `backend/src/rag/embed_docs.py`
+- [x] Embed `doc_summary` to `doc_embedding`
+- [x] Populate `doc_search_vector` for FTS
+- [x] Update `doc_status` to 'embedded'
 
-### 2.3 Add Doc Enrichment to Worker Loop
-- [ ] Add doc enrichment phase before chunk enrichment
-- [ ] Process docs in batches of 50-100
-- [ ] Prioritize docs that have enriched chunks
+### 2.3 Add Doc Enrichment to Worker Loop ✅
+- [x] Add doc enrichment phase before chunk enrichment
+- [x] Process docs in batches of 20
+- [x] Dashboard controls for enrich_docs and embed_docs
+- **Status**: Running - ~120k docs pending enrichment
 
 ---
 
-## Phase 3: Two-Stage Retrieval
+## Phase 3: Two-Stage Retrieval 🔄
 
-### 3.1 Update Search API
-- [ ] Stage 1: Query doc-level vectors + FTS (fast, 125k docs)
-- [ ] Stage 2: Query chunk vectors only within top N file_ids
-- [ ] Return combined results with doc context
+### 3.1 Update Search API ✅
+- [x] Stage 1: Query doc-level vectors + FTS (fast, 125k docs)
+- [x] Stage 2: Query chunk vectors only within top N file_ids
+- [x] Return combined results with doc context
+- [x] Fallback to keyword search when chunks not embedded
+- **Endpoint**: `POST /search/two-stage`
+- **Performance**: ~166ms total (112ms stage1, 16ms stage2, 30ms embed)
 
 ### 3.2 Add Vector Indexes (After Population)
 - [ ] Create IVFFlat index on `raw_files.doc_embedding` (lists=200)

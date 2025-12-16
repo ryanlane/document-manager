@@ -1484,6 +1484,732 @@
   transition: width 0.3s;
 }
 
+/* ===========================================
+   LLM Workers / Endpoints Tab Styles
+   =========================================== */
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.sectionHeader h2 {
+  margin: 0 0 0.25rem 0;
+}
+
+.addBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.addBtn:hover {
+  opacity: 0.9;
+}
+
+.addForm {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.addForm .formRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.addForm input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.addForm input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.addForm button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.addForm button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  background: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.addForm small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.addForm small code {
+  background: var(--bg-primary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  margin: 0 0.25rem;
+}
+
+.endpointsList {
+  margin-bottom: 1.5rem;
+}
+
+.loadingSmall {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.emptyState p {
+  margin: 0;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.emptyState small {
+  font-size: 0.8rem;
+}
+
+.endpoint {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s;
+}
+
+.endpoint.disabled {
+  opacity: 0.5;
+}
+
+.endpoint.paused {
+  background: color-mix(in srgb, var(--warning-color, #f59e0b) 8%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--warning-color, #f59e0b) 30%, var(--border-color));
+}
+
+.endpointStatus {
+  flex-shrink: 0;
+}
+
+.endpointStatus .connected {
+  color: var(--success-color);
+}
+
+.endpointStatus .disconnected {
+  color: var(--error-color);
+}
+
+.endpointStatus .pausedIcon {
+  color: var(--warning-color, #f59e0b);
+}
+
+.endpointInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.endpointName {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.125rem;
+}
+
+.pausedBadge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  background: var(--warning-color, #f59e0b);
+  color: white;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.endpointUrl {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: none;
+  padding: 0;
+}
+
+.endpointMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+}
+
+.endpointMeta span {
+  padding: 0.125rem 0.375rem;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.capBadge {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent) !important;
+  color: var(--accent-color) !important;
+}
+
+.errorText {
+  color: var(--error-color) !important;
+  background: color-mix(in srgb, var(--error-color) 10%, transparent) !important;
+}
+
+.endpointActions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.endpointActions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.endpointActions button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.endpointActions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pause/Resume button */
+.pauseBtn {
+  width: auto !important;
+  padding: 0 0.75rem !important;
+  gap: 0.375rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.pauseBtn.running {
+  background: color-mix(in srgb, var(--warning-color, #f59e0b) 15%, transparent);
+  border-color: var(--warning-color, #f59e0b);
+  color: var(--warning-color, #f59e0b);
+}
+
+.pauseBtn.running:hover {
+  background: var(--warning-color, #f59e0b);
+  color: white;
+}
+
+.pauseBtn.pausedBtn {
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.pauseBtn.pausedBtn:hover {
+  background: var(--success-color);
+  color: white;
+}
+
+.endpointActions .activeToggle {
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
+.endpointActions .deleteBtn:hover {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.presets {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.presets h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.presetBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.presetBtns button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.presetBtns button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+/* Model Grid */
+.modelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.modelSelect {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modelSelect label {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.modelSelect select {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.modelSelect select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.modelSelect small {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.refreshBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.refreshBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Cloud Providers */
+.cloudProviders {
+  margin-top: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.cloudProviders summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.cloudProviders summary:hover {
+  color: var(--text-primary);
+}
+
+.cloudContent {
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+  display: grid;
+  gap: 1rem;
+}
+
+.cloudProvider h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.apiKeyRow {
+  display: flex;
+  gap: 0;
+}
+
+.apiKeyRow input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px 0 0 6px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.apiKeyRow button {
+  padding: 0 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* Sources Tab */
+.mountsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.mount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.mount.added {
+  background: color-mix(in srgb, var(--success-color) 10%, transparent);
+  border-color: color-mix(in srgb, var(--success-color) 30%, transparent);
+}
+
+.mountInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.mountName {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.mountStats {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.addMountBtn,
+.removeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.addMountBtn:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.removeBtn:hover {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  border-color: var(--error-color);
+  color: var(--error-color);
+}
+
+.noMounts {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: 0.75rem 0;
+}
+
+.activeList {
+  margin: 1.5rem 0;
+}
+
+.activeList h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.activeItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 0.375rem;
+}
+
+.activeItem span {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.activeItem .ok {
+  color: var(--success-color);
+}
+
+.activeItem .missing {
+  color: var(--error-color);
+}
+
+.activeItem .count {
+  flex: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.activeItem button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.activeItem button:hover {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  color: var(--error-color);
+}
+
+.excludeSection {
+  margin-top: 1.5rem;
+}
+
+.excludeSection h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.excludeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.excludeTag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: monospace;
+  color: var(--text-secondary);
+}
+
+.excludeTag button {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.25rem;
+}
+
+.excludeTag button:hover {
+  color: var(--error-color);
+}
+
+.addExclude {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.addExclude input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: monospace;
+}
+
+.addExclude button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.addExclude button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Extensions Tab */
+.extCategories {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.extCategory {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.extCategory h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.extToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.extToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.extToggle:has(input:checked) {
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.extToggle input {
+  display: none;
+}
+
+.customExt {
+  margin: 1rem 0;
+}
+
+.customExt input {
+  width: 100%;
+  max-width: 300px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .container {
@@ -1530,5 +2256,22 @@
     left: 1rem;
     right: 1rem;
     max-height: 60vh;
+  }
+
+  .sectionHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .addForm .formRow {
+    flex-direction: column;
+  }
+
+  .endpoint {
+    flex-wrap: wrap;
+  }
+
+  .modelGrid {
+    grid-template-columns: 1fr;
   }
 }

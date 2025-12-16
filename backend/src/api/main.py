@@ -15,7 +15,7 @@ from src.db.settings import (
     get_source_folders, add_source_folder, remove_source_folder,
     add_exclude_pattern, remove_exclude_pattern, Setting, DEFAULT_SETTINGS
 )
-from src.rag.search import search_entries_semantic, SEARCH_MODE_VECTOR, SEARCH_MODE_KEYWORD, SEARCH_MODE_HYBRID
+from src.rag.search import search_entries_semantic, search_two_stage, SEARCH_MODE_VECTOR, SEARCH_MODE_KEYWORD, SEARCH_MODE_HYBRID, SEARCH_MODE_TWO_STAGE
 from src.llm_client import generate_text, list_models, list_vision_models, describe_image, OLLAMA_URL, MODEL, EMBEDDING_MODEL, VISION_MODEL
 import requests
 
@@ -869,6 +869,177 @@ def detect_model_capabilities(model_info: dict) -> dict:
         "embedding": is_embedding,
         "vision": is_vision
     }
+
+
+# ============================================================================
+# LLM Endpoints Management - for distributed processing across multiple servers
+# ============================================================================
+
+class LLMEndpoint(BaseModel):
+    id: Optional[str] = None
+    name: str
+    url: str
+    type: str = "ollama"  # ollama, openai-compatible
+    enabled: bool = True
+    capabilities: Optional[List[str]] = None  # chat, embedding, vision
+    priority: int = 0  # Higher = preferred
+
+class LLMEndpointUpdate(BaseModel):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    type: Optional[str] = None
+    enabled: Optional[bool] = None
+    capabilities: Optional[List[str]] = None
+    priority: Optional[int] = None
+
+
+@app.get("/settings/llm-endpoints")
+def get_llm_endpoints(db: Session = Depends(get_db)):
+    """Get all configured LLM endpoints for distributed processing."""
+    ensure_settings_table(db)
+    endpoints = get_setting(db, "llm_endpoints") or []
+    
+    # Return with live status for each endpoint
+    result = []
+    for ep in endpoints:
+        status = {"connected": False, "models": 0, "error": None}
+        if ep.get("enabled", True):
+            try:
+                url = ep.get("url", "").rstrip("/")
+                resp = requests.get(f"{url}/api/tags", timeout=3)
+                if resp.status_code == 200:
+                    models = resp.json().get("models", [])
+                    status = {"connected": True, "models": len(models), "error": None}
+                else:
+                    status["error"] = f"Status {resp.status_code}"
+            except requests.Timeout:
+                status["error"] = "Timeout"
+            except Exception as e:
+                status["error"] = str(e)[:100]
+        
+        result.append({**ep, "status": status})
+    
+    return result
+
+
+@app.post("/settings/llm-endpoints")
+def add_llm_endpoint(endpoint: LLMEndpoint, db: Session = Depends(get_db)):
+    """Add a new LLM endpoint."""
+    ensure_settings_table(db)
+    endpoints = get_setting(db, "llm_endpoints") or []
+    
+    # Generate unique ID
+    import uuid
+    new_ep = endpoint.dict()
+    new_ep["id"] = str(uuid.uuid4())[:8]
+    
+    # Auto-detect capabilities if not provided
+    if not new_ep.get("capabilities"):
+        try:
+            url = new_ep["url"].rstrip("/")
+            resp = requests.get(f"{url}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                models = resp.json().get("models", [])
+                caps = set()
+                for m in models:
+                    model_caps = detect_model_capabilities(m)
+                    if model_caps.get("chat"):
+                        caps.add("chat")
+                    if model_caps.get("embedding"):
+                        caps.add("embedding")
+                    if model_caps.get("vision"):
+                        caps.add("vision")
+                new_ep["capabilities"] = list(caps) if caps else ["chat"]
+        except:
+            new_ep["capabilities"] = ["chat"]
+    
+    endpoints.append(new_ep)
+    
+    if set_setting(db, "llm_endpoints", endpoints):
+        return new_ep
+    raise HTTPException(status_code=500, detail="Failed to add endpoint")
+
+
+@app.put("/settings/llm-endpoints/{endpoint_id}")
+def update_llm_endpoint(endpoint_id: str, update: LLMEndpointUpdate, db: Session = Depends(get_db)):
+    """Update an existing LLM endpoint."""
+    ensure_settings_table(db)
+    endpoints = get_setting(db, "llm_endpoints") or []
+    
+    for i, ep in enumerate(endpoints):
+        if ep.get("id") == endpoint_id:
+            for field, value in update.dict(exclude_none=True).items():
+                endpoints[i][field] = value
+            if set_setting(db, "llm_endpoints", endpoints):
+                return endpoints[i]
+            raise HTTPException(status_code=500, detail="Failed to update endpoint")
+    
+    raise HTTPException(status_code=404, detail="Endpoint not found")
+
+
+@app.delete("/settings/llm-endpoints/{endpoint_id}")
+def delete_llm_endpoint(endpoint_id: str, db: Session = Depends(get_db)):
+    """Delete an LLM endpoint."""
+    ensure_settings_table(db)
+    endpoints = get_setting(db, "llm_endpoints") or []
+    
+    original_len = len(endpoints)
+    endpoints = [ep for ep in endpoints if ep.get("id") != endpoint_id]
+    
+    if len(endpoints) == original_len:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+    
+    if set_setting(db, "llm_endpoints", endpoints):
+        return {"deleted": endpoint_id}
+    raise HTTPException(status_code=500, detail="Failed to delete endpoint")
+
+
+@app.post("/settings/llm-endpoints/{endpoint_id}/test")
+def test_llm_endpoint(endpoint_id: str, db: Session = Depends(get_db)):
+    """Test connectivity to a specific LLM endpoint."""
+    ensure_settings_table(db)
+    endpoints = get_setting(db, "llm_endpoints") or []
+    
+    endpoint = next((ep for ep in endpoints if ep.get("id") == endpoint_id), None)
+    if not endpoint:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+    
+    url = endpoint.get("url", "").rstrip("/")
+    result = {
+        "endpoint_id": endpoint_id,
+        "name": endpoint.get("name"),
+        "url": url,
+        "connected": False,
+        "models": [],
+        "capabilities": [],
+        "error": None
+    }
+    
+    try:
+        resp = requests.get(f"{url}/api/tags", timeout=10)
+        if resp.status_code == 200:
+            models = resp.json().get("models", [])
+            caps = set()
+            for m in models:
+                model_caps = detect_model_capabilities(m)
+                if model_caps.get("chat"):
+                    caps.add("chat")
+                if model_caps.get("embedding"):
+                    caps.add("embedding")
+                if model_caps.get("vision"):
+                    caps.add("vision")
+            
+            result["connected"] = True
+            result["models"] = [m["name"] for m in models]
+            result["capabilities"] = list(caps)
+        else:
+            result["error"] = f"Server returned status {resp.status_code}"
+    except requests.Timeout:
+        result["error"] = "Connection timed out"
+    except Exception as e:
+        result["error"] = str(e)
+    
+    return result
 
 
 @app.get("/settings/ollama/status")
@@ -2170,6 +2341,71 @@ def search_with_explanation(
             "keyword_search": "Uses PostgreSQL full-text search (BM25) to find exact word matches.",
             "hybrid_search": "Combines vector (70%) and keyword (30%) scores for best results."
         }
+    }
+
+
+class TwoStageSearchRequest(BaseModel):
+    query: str
+    k: int = 10  # Final number of chunks to return
+    stage1_docs: int = 20  # Number of docs to consider in stage 1
+    filters: dict = {}  # Optional filters
+
+
+@app.post("/search/two-stage")
+def search_two_stage_endpoint(
+    request: TwoStageSearchRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Two-stage retrieval for large collections.
+    
+    Stage 1: Search doc-level embeddings to find relevant documents (fast, ~125k docs).
+    Stage 2: Search chunk-level embeddings within top N docs (precise, filtered set).
+    
+    This approach dramatically reduces search time for large collections while
+    maintaining quality by first narrowing to relevant documents.
+    """
+    from src.rag.search import search_two_stage as two_stage_search
+    
+    result = two_stage_search(
+        db=db,
+        query=request.query,
+        k=request.k,
+        stage1_docs=request.stage1_docs,
+        filters=request.filters
+    )
+    
+    # Serialize entries
+    entries = []
+    for entry in result.get('entries', []):
+        entries.append({
+            "id": entry.id,
+            "title": entry.title,
+            "summary": entry.summary,
+            "category": entry.category,
+            "author": entry.author,
+            "tags": entry.tags,
+            "entry_text": entry.entry_text[:500] if entry.entry_text else None,
+            "doc_id": entry.file_id,
+            "file_path": entry.raw_file.path if entry.raw_file else None
+        })
+    
+    return {
+        "query": request.query,
+        "search_mode": "two_stage",
+        "stages": {
+            "stage1": {
+                "docs_searched": "~125k doc-level embeddings",
+                "docs_returned": result.get('stats', {}).get('docs_searched', 0)
+            },
+            "stage2": {
+                "docs_filtered": result.get('stats', {}).get('docs_searched', 0),
+                "chunks_returned": len(entries)
+            }
+        },
+        "timing": result.get('stats', {}),
+        "entries": entries,
+        "doc_context": result.get('docs', [])
     }
 
 
