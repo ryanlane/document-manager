@@ -10,19 +10,19 @@
 |--------|-------|
 | Total entries (chunks) | 8,244,409 |
 | Total raw_files (docs) | 125,544 |
-| Docs enriched | ~4,700 (3.7%) |
-| Docs embedded | ~4,600 (3.7%) |
-| Docs pending | ~119,600 (95%) |
+| Docs enriched | ~6,400 (5.1%) |
+| Docs embedded | ~6,200 (4.9%) |
+| Docs pending | ~119,100 (95%) |
 | Entries enriched | ~111,379 (1.4%) |
 | Entries embedded | ~15,520 |
 | Avg chunks per doc | ~66 |
 
 **Active Workers**: asgard (3060) running doc enrichment + embedding @ ~1 doc/sec
 
-**Two-Stage Search**: ✅ Implemented and working
-- Stage 1: ~200ms to search ~4600 doc embeddings
-- Stage 2: ~13ms to search chunks within top N docs
-- Total: ~260ms per query
+**Two-Stage Search**: ✅ Implemented with IVFFlat indexes
+- Stage 1: ~100ms to search ~6k doc embeddings (with indexes)
+- Stage 2: ~5ms to search chunks within top N docs
+- Total: ~140ms per query
 
 ---
 
@@ -80,10 +80,11 @@
 - **Endpoint**: `POST /search/two-stage`
 - **Performance**: ~166ms total (112ms stage1, 16ms stage2, 30ms embed)
 
-### 3.2 Add Vector Indexes (After Population)
-- [ ] Create IVFFlat index on `raw_files.doc_embedding` (lists=200)
-- [ ] Create IVFFlat index on `entries.embedding` (lists=2000)
-- [ ] Test with `ivfflat.probes` = 5, 10, 20
+### 3.2 Add Vector Indexes (After Population) ✅
+- [x] Create IVFFlat index on `raw_files.doc_embedding` (lists=200) - 24MB
+- [x] Create IVFFlat index on `entries.embedding` (lists=2000) - 74MB
+- [x] Set `ivfflat.probes = 10` in search code for better recall
+- **Performance with indexes**: Stage1=~130ms, Stage2=~6ms, Total=~175ms
 
 ### 3.3 Implement Ranking Fusion
 - [ ] Normalize BM25 scores

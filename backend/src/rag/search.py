@@ -31,6 +31,10 @@ def search_docs_stage1(
     Uses doc_embedding (vector) and doc_search_vector (FTS) for hybrid ranking.
     Returns top N document IDs with scores.
     """
+    # Set IVFFlat probes for better recall (default is 1)
+    # Higher = better recall but slower. 10 is a good balance.
+    db.execute(text("SET ivfflat.probes = 10"))
+    
     # Build filter conditions
     filter_sql = ""
     params = {
