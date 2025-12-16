@@ -60,7 +60,9 @@ class WorkerStateUpdate(BaseModel):
     ingest: Optional[bool] = None
     segment: Optional[bool] = None
     enrich: Optional[bool] = None
+    enrich_docs: Optional[bool] = None
     embed: Optional[bool] = None
+    embed_docs: Optional[bool] = None
     running: Optional[bool] = None
 
 def get_worker_state():
@@ -69,7 +71,9 @@ def get_worker_state():
         "ingest": True,
         "segment": True,
         "enrich": True,
+        "enrich_docs": True,
         "embed": True,
+        "embed_docs": True,
         "running": True
     }
     try:
@@ -109,8 +113,12 @@ def update_worker_state(update: WorkerStateUpdate):
         current["segment"] = update.segment
     if update.enrich is not None:
         current["enrich"] = update.enrich
+    if update.enrich_docs is not None:
+        current["enrich_docs"] = update.enrich_docs
     if update.embed is not None:
         current["embed"] = update.embed
+    if update.embed_docs is not None:
+        current["embed_docs"] = update.embed_docs
     if update.running is not None:
         current["running"] = update.running
     
@@ -224,8 +232,34 @@ def get_worker_stats(db: Session = Depends(get_db)):
             "eta_hours": round(eta_hours, 1) if eta_hours else None,
             "eta_days": round(eta_days, 1) if eta_days else None,
             "eta_string": eta_str
-        }
+        },
+        "docs": get_doc_stats(db)
     }
+
+def get_doc_stats(db: Session) -> dict:
+    """Get doc-level enrichment/embedding stats."""
+    try:
+        result = db.execute(text("""
+            SELECT 
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE doc_status = 'pending') as pending,
+                COUNT(*) FILTER (WHERE doc_status = 'enriched') as enriched,
+                COUNT(*) FILTER (WHERE doc_status = 'embedded') as embedded,
+                COUNT(*) FILTER (WHERE doc_status IN ('error', 'embed_error')) as error,
+                COUNT(doc_embedding) as has_embedding
+            FROM raw_files
+        """)).fetchone()
+        
+        return {
+            "total": result[0],
+            "pending": result[1],
+            "enriched": result[2],
+            "embedded": result[3],
+            "error": result[4],
+            "has_embedding": result[5]
+        }
+    except Exception:
+        return {"error": "Could not fetch doc stats"}
 
 @app.get("/system/status")
 def get_system_status():

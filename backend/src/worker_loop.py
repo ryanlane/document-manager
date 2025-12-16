@@ -36,7 +36,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.ingest.ingest_files import main as ingest_main
 from src.segment.segment_entries import main as segment_main
 from src.enrich.enrich_entries import main as enrich_main
+from src.enrich.enrich_docs import main as enrich_docs_main
 from src.rag.embed_entries import main as embed_main
+from src.rag.embed_docs import main as embed_docs_main
 
 # Re-apply file handler to root logger AFTER imports (child modules may have altered config)
 root_logger = logging.getLogger()
@@ -53,7 +55,9 @@ def get_state():
         "ingest": True,
         "segment": True,
         "enrich": True,
+        "enrich_docs": True,  # Doc-level enrichment
         "embed": True,
+        "embed_docs": True,   # Doc-level embedding
         "running": True
     }
     try:
@@ -107,15 +111,27 @@ def run_pipeline():
                 logger.info("--- Starting Segmentation Phase ---")
                 segment_main()
             
-            # 3. Enrich
+            # 3. Doc-level Enrichment (run before chunk enrichment)
+            if state.get("enrich_docs", True):
+                logger.info("--- Starting Doc Enrichment Phase ---")
+                for _ in range(10):  # 10 iterations x 20 batch = 200 docs/cycle
+                    enrich_docs_main()
+            
+            # 4. Chunk Enrichment
             if state.get("enrich", True):
-                logger.info("--- Starting Enrichment Phase ---")
+                logger.info("--- Starting Chunk Enrichment Phase ---")
                 for _ in range(50):  # 50 iterations x 100 batch = 5000 entries/cycle
                     enrich_main()
+            
+            # 5. Doc-level Embedding (fast, run before chunk embedding)
+            if state.get("embed_docs", True):
+                logger.info("--- Starting Doc Embedding Phase ---")
+                for _ in range(5):  # 5 iterations x 50 batch = 250 docs/cycle
+                    embed_docs_main()
                 
-            # 4. Embed
+            # 6. Chunk Embedding
             if state.get("embed", True):
-                logger.info("--- Starting Embedding Phase ---")
+                logger.info("--- Starting Chunk Embedding Phase ---")
                 for _ in range(10):  # More embedding iterations
                     embed_main()
                 

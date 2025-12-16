@@ -89,6 +89,17 @@ class RawFile(Base):
     series_number = Column(Integer)  # Part/chapter number in series
     series_total = Column(Integer)  # Total parts if known (e.g., "1 of 5")
     
+    # Source and author normalization (for partitioning/filtering)
+    source = Column(Text)  # e.g., 'story', 'docs' - derived from path
+    author_key = Column(Text)  # Normalized author (lowercase, trimmed)
+    author_bucket = Column(Integer)  # hash(author_key) % 128 for partitioning
+    
+    # Document-level embeddings (for two-stage retrieval)
+    doc_summary = Column(Text)  # LLM-generated summary of entire document
+    doc_embedding = Column(Vector(768))  # Document-level embedding
+    doc_search_vector = Column(TSVECTOR)  # Document-level FTS
+    doc_status = Column(Text, default='pending')  # 'pending', 'enriched', 'embedded'
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -98,6 +109,9 @@ class RawFile(Base):
     __table_args__ = (
         Index('raw_files_series_idx', 'series_name'),
         Index('raw_files_file_type_idx', 'file_type'),
+        Index('raw_files_author_key_idx', 'author_key'),
+        Index('raw_files_source_idx', 'source'),
+        Index('raw_files_doc_search_idx', 'doc_search_vector', postgresql_using='gin'),
     )
 
 
@@ -140,6 +154,11 @@ class Entry(Base):
     tags = Column(ARRAY(Text))
     summary = Column(Text)
     extra_meta = Column(JSONB)
+    
+    # Source and author normalization (denormalized for fast filtering)
+    source = Column(Text)  # e.g., 'story', 'docs' - copied from raw_file
+    author_key = Column(Text)  # Normalized author (lowercase, trimmed)
+    author_bucket = Column(Integer)  # hash(author_key) % 128 for partitioning
 
     search_vector = Column(TSVECTOR)
     embedding = Column(Vector(768)) # Assuming 768 dimensions for standard models (e.g. nomic-embed-text, or llama3 hidden state)
@@ -155,4 +174,7 @@ class Entry(Base):
         Index('entries_file_idx', 'file_id'),
         Index('entries_search_idx', 'search_vector', postgresql_using='gin'),
         Index('entries_content_hash_idx', 'content_hash'),
+        Index('entries_author_key_idx', 'author_key'),
+        Index('entries_source_idx', 'source'),
+        Index('entries_author_bucket_idx', 'author_bucket'),
     )
