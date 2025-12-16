@@ -7,6 +7,17 @@ import {
 import { Link } from 'react-router-dom'
 import styles from './Dashboard.module.css'
 
+// Track which toggles are pending
+const usePendingToggles = () => {
+  const [pending, setPending] = useState({})
+  
+  const setPending_ = (key, value) => {
+    setPending(prev => ({ ...prev, [key]: value }))
+  }
+  
+  return [pending, setPending_]
+}
+
 // Skeleton loader component
 const Skeleton = ({ width = '100%', height = '1rem', style = {} }) => (
   <div 
@@ -67,6 +78,7 @@ function Dashboard() {
   const [counts, setCounts] = useState(null)
   const [docCounts, setDocCounts] = useState(null)
   const [workerState, setWorkerState] = useState(null)
+  const [pendingToggles, setPendingToggle] = usePendingToggles()
   const [systemStatus, setSystemStatus] = useState(null)
   const [workerStats, setWorkerStats] = useState(null)
   
@@ -145,6 +157,9 @@ function Dashboard() {
   }, [])
 
   const updateWorkerState = async (updates) => {
+    // Mark the keys as pending
+    Object.keys(updates).forEach(key => setPendingToggle(key, true))
+    
     try {
       const res = await fetch('/api/worker/state', {
         method: 'POST',
@@ -154,6 +169,11 @@ function Dashboard() {
       const data = await res.json()
       setWorkerState(data)
     } catch (err) { console.error('update state:', err) }
+    
+    // Clear pending state after a short delay to show the transition
+    setTimeout(() => {
+      Object.keys(updates).forEach(key => setPendingToggle(key, false))
+    }, 300)
   }
 
   const toggleProcess = (process) => {
@@ -224,53 +244,54 @@ function Dashboard() {
       {/* Worker Controls - Compact */}
       <div className={styles.controlBar}>
         <button 
-          className={`${styles.masterBtn} ${workerState?.running ? styles.running : styles.paused}`}
+          className={`${styles.masterBtn} ${workerState?.running ? styles.running : styles.paused} ${pendingToggles.running ? styles.pending : ''}`}
           onClick={() => updateWorkerState({ running: !workerState?.running })}
+          disabled={pendingToggles.running}
         >
-          {workerState?.running ? <Pause size={16} /> : <Play size={16} />}
+          {pendingToggles.running ? <Loader2 size={16} className={styles.spin} /> : (workerState?.running ? <Pause size={16} /> : <Play size={16} />)}
           {workerState?.running ? 'Running' : 'Paused'}
         </button>
         
         <div className={styles.toggleGroup}>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.ingest ? styles.on : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.ingest ? styles.on : ''} ${pendingToggles.ingest ? styles.pending : ''}`}
             onClick={() => toggleProcess('ingest')}
-            disabled={!workerState?.running}
+            disabled={!workerState?.running || pendingToggles.ingest}
             title="Ingest new files"
           >
-            <FilePlus size={14} /> Ingest
+            {pendingToggles.ingest ? <Loader2 size={14} className={styles.spin} /> : <FilePlus size={14} />} Ingest
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.enrich_docs ? styles.on : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.enrich_docs ? styles.on : ''} ${pendingToggles.enrich_docs ? styles.pending : ''}`}
             onClick={() => toggleProcess('enrich_docs')}
-            disabled={!workerState?.running}
+            disabled={!workerState?.running || pendingToggles.enrich_docs}
             title="Enrich documents"
           >
-            <Sparkles size={14} /> Docs
+            {pendingToggles.enrich_docs ? <Loader2 size={14} className={styles.spin} /> : <Sparkles size={14} />} Docs
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.embed_docs ? styles.on : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.embed_docs ? styles.on : ''} ${pendingToggles.embed_docs ? styles.pending : ''}`}
             onClick={() => toggleProcess('embed_docs')}
-            disabled={!workerState?.running}
+            disabled={!workerState?.running || pendingToggles.embed_docs}
             title="Embed documents"
           >
-            <Binary size={14} /> Doc Embed
+            {pendingToggles.embed_docs ? <Loader2 size={14} className={styles.spin} /> : <Binary size={14} />} Doc Embed
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.enrich ? styles.on : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.enrich ? styles.on : ''} ${pendingToggles.enrich ? styles.pending : ''}`}
             onClick={() => toggleProcess('enrich')}
-            disabled={!workerState?.running}
+            disabled={!workerState?.running || pendingToggles.enrich}
             title="Enrich chunks"
           >
-            <Layers size={14} /> Chunks
+            {pendingToggles.enrich ? <Loader2 size={14} className={styles.spin} /> : <Layers size={14} />} Chunks
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.embed ? styles.on : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.embed ? styles.on : ''} ${pendingToggles.embed ? styles.pending : ''}`}
             onClick={() => toggleProcess('embed')}
-            disabled={!workerState?.running}
+            disabled={!workerState?.running || pendingToggles.embed}
             title="Embed chunks"
           >
-            <Cpu size={14} /> Chunk Embed
+            {pendingToggles.embed ? <Loader2 size={14} className={styles.spin} /> : <Cpu size={14} />} Chunk Embed
           </button>
         </div>
       </div>

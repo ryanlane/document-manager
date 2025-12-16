@@ -95,6 +95,21 @@
   cursor: not-allowed;
 }
 
+.toggleBtn.pending,
+.masterBtn.pending {
+  animation: pulse 1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 /* Pipeline Grid - Two Stage Layout */
 .pipelineGrid {
   display: grid;
