@@ -29,6 +29,12 @@ def search_docs_stage1(
     """
     Stage 1: Search at document level for fast screening.
     Uses doc_embedding (vector) and doc_search_vector (FTS) for hybrid ranking.
+    
+    Uses Reciprocal Rank Fusion (RRF) to combine vector and keyword rankings.
+    RRF formula: score = sum(1 / (k + rank_i)) where k=60 is standard.
+    This is more robust than raw score combination since it normalizes 
+    across different score distributions.
+    
     Returns top N document IDs with scores.
     """
     # Set IVFFlat probes for better recall (default is 1)
@@ -40,7 +46,7 @@ def search_docs_stage1(
     params = {
         "embedding": str(query_embedding),
         "query": query,
-        "limit": top_n
+        "limit": top_n * 3  # Get more candidates for RRF
     }
     
     if filters:
@@ -54,33 +60,51 @@ def search_docs_stage1(
             filter_sql += " AND rf.extension = :ext_filter"
             params['ext_filter'] = filters['extension']
     
+    # Use Reciprocal Rank Fusion (RRF) with k=60
+    # RRF score = 1/(k + vector_rank) + 1/(k + keyword_rank)
+    # This normalizes scores across different distributions
+    # Limit each source to top 100 candidates for efficiency
     sql = text(f"""
         WITH doc_vector AS (
             SELECT rf.id, 
-                   1.0 - (rf.doc_embedding <=> :embedding) as vector_score
+                   1.0 - (rf.doc_embedding <=> :embedding) as vector_score,
+                   ROW_NUMBER() OVER (ORDER BY rf.doc_embedding <=> :embedding) as vector_rank
             FROM raw_files rf
             WHERE rf.doc_embedding IS NOT NULL
             {filter_sql}
+            ORDER BY rf.doc_embedding <=> :embedding
+            LIMIT 100
         ),
         doc_keyword AS (
             SELECT rf.id,
-                   COALESCE(ts_rank_cd(rf.doc_search_vector, plainto_tsquery('english', :query)), 0) as keyword_score
+                   COALESCE(ts_rank_cd(rf.doc_search_vector, plainto_tsquery('english', :query)), 0) as keyword_score,
+                   ROW_NUMBER() OVER (ORDER BY ts_rank_cd(rf.doc_search_vector, plainto_tsquery('english', :query)) DESC NULLS LAST) as keyword_rank
             FROM raw_files rf
-            WHERE rf.doc_search_vector IS NOT NULL
+            WHERE rf.doc_search_vector @@ plainto_tsquery('english', :query)
             {filter_sql}
+            ORDER BY ts_rank_cd(rf.doc_search_vector, plainto_tsquery('english', :query)) DESC
+            LIMIT 100
+        ),
+        rrf_scores AS (
+            SELECT 
+                COALESCE(v.id, k.id) as doc_id,
+                COALESCE(v.vector_score, 0) as vector_score,
+                COALESCE(k.keyword_score, 0) as keyword_score,
+                COALESCE(v.vector_rank, 99999) as vector_rank,
+                COALESCE(k.keyword_rank, 99999) as keyword_rank,
+                -- RRF with k=60, weight vector 0.7, keyword 0.3
+                (0.7 / (60.0 + COALESCE(v.vector_rank, 99999))) + 
+                (0.3 / (60.0 + COALESCE(k.keyword_rank, 99999))) as rrf_score
+            FROM doc_vector v
+            FULL OUTER JOIN doc_keyword k ON v.id = k.id
         )
-        SELECT 
-            COALESCE(v.id, k.id) as doc_id,
-            COALESCE(v.vector_score, 0) as vector_score,
-            COALESCE(k.keyword_score, 0) as keyword_score,
-            (COALESCE(v.vector_score, 0) * 0.6 + COALESCE(k.keyword_score, 0) * 0.4) as combined_score
-        FROM doc_vector v
-        FULL OUTER JOIN doc_keyword k ON v.id = k.id
-        WHERE COALESCE(v.vector_score, 0) > 0.3 OR COALESCE(k.keyword_score, 0) > 0.01
-        ORDER BY combined_score DESC
+        SELECT doc_id, vector_score, keyword_score, rrf_score
+        FROM rrf_scores
+        ORDER BY rrf_score DESC
         LIMIT :limit
     """)
     
+    params['limit'] = top_n  # Final limit
     results = db.execute(sql, params).fetchall()
     return [{"doc_id": r[0], "vector_score": r[1], "keyword_score": r[2], "combined_score": r[3]} for r in results]
 
@@ -95,25 +119,43 @@ def search_chunks_stage2(
     """
     Stage 2: Search chunks only within the specified document IDs.
     Much faster than global search since we're limiting to a small doc set.
+    Uses RRF (Reciprocal Rank Fusion) for combining vector and keyword scores.
     Falls back to keyword search if chunks don't have embeddings.
     """
     if not doc_ids:
         return []
     
-    # First try vector + keyword hybrid search on embedded chunks
+    # Use RRF for hybrid ranking within the filtered doc set
     sql = text("""
-        WITH chunk_scores AS (
+        WITH vector_ranked AS (
             SELECT e.id,
                    1.0 - (e.embedding <=> :embedding) as vector_score,
-                   COALESCE(ts_rank_cd(e.search_vector, plainto_tsquery('english', :query)), 0) as keyword_score
+                   ROW_NUMBER() OVER (ORDER BY e.embedding <=> :embedding) as vector_rank
             FROM entries e
             WHERE e.file_id = ANY(:doc_ids)
               AND e.embedding IS NOT NULL
+        ),
+        keyword_ranked AS (
+            SELECT e.id,
+                   COALESCE(ts_rank_cd(e.search_vector, plainto_tsquery('english', :query)), 0) as keyword_score,
+                   ROW_NUMBER() OVER (ORDER BY ts_rank_cd(e.search_vector, plainto_tsquery('english', :query)) DESC NULLS LAST) as keyword_rank
+            FROM entries e
+            WHERE e.file_id = ANY(:doc_ids)
+        ),
+        rrf_combined AS (
+            SELECT 
+                COALESCE(v.id, k.id) as id,
+                COALESCE(v.vector_score, 0) as vector_score,
+                COALESCE(k.keyword_score, 0) as keyword_score,
+                -- RRF with k=60, weight vector 0.7, keyword 0.3
+                (0.7 / (60.0 + COALESCE(v.vector_rank, 99999))) + 
+                (0.3 / (60.0 + COALESCE(k.keyword_rank, 99999))) as rrf_score
+            FROM vector_ranked v
+            FULL OUTER JOIN keyword_ranked k ON v.id = k.id
         )
-        SELECT id, vector_score, keyword_score,
-               (vector_score * 0.7 + keyword_score * 0.3) as combined_score
-        FROM chunk_scores
-        ORDER BY combined_score DESC
+        SELECT id, vector_score, keyword_score, rrf_score
+        FROM rrf_combined
+        ORDER BY rrf_score DESC
         LIMIT :limit
     """)
     

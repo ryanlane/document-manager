@@ -4,25 +4,26 @@
 
 ---
 
-## Current State (Dec 16, 2025 - Updated)
+## Current State (Dec 17, 2025 - Updated)
 
 | Metric | Value |
 |--------|-------|
 | Total entries (chunks) | 8,244,409 |
 | Total raw_files (docs) | 125,544 |
-| Docs enriched | ~6,400 (5.1%) |
-| Docs embedded | ~6,200 (4.9%) |
-| Docs pending | ~119,100 (95%) |
-| Entries enriched | ~111,379 (1.4%) |
-| Entries embedded | ~15,520 |
+| Docs enriched | ~7,678 (6.1%) |
+| Docs embedded | ~7,335 (5.8%) |
+| Docs pending | ~117,866 (94%) |
+| Entries with title | 546,941 (6.6%) |
+| Entries with summary | 548,268 (6.6%) |
+| Entries with category | 555,180 (6.7%) |
 | Avg chunks per doc | ~66 |
 
-**Active Workers**: asgard (3060) running doc enrichment + embedding @ ~1 doc/sec
+**Active Workers**: asgard (3060) + oak (1070 Ti) running doc enrichment + embedding @ ~1 doc/sec
 
-**Two-Stage Search**: ✅ Implemented with IVFFlat indexes
-- Stage 1: ~100ms to search ~6k doc embeddings (with indexes)
-- Stage 2: ~5ms to search chunks within top N docs
-- Total: ~140ms per query
+**Two-Stage Search**: ✅ Implemented with IVFFlat indexes and RRF ranking
+- Stage 1: ~20ms to search ~7k doc embeddings (with indexes + RRF)
+- Stage 2: ~10ms to search chunks within top N docs
+- Total: ~80ms per query (down from 140ms)
 
 ---
 
@@ -86,25 +87,30 @@
 - [x] Set `ivfflat.probes = 10` in search code for better recall
 - **Performance with indexes**: Stage1=~130ms, Stage2=~6ms, Total=~175ms
 
-### 3.3 Implement Ranking Fusion
-- [ ] Normalize BM25 scores
-- [ ] Normalize vector similarity scores  
-- [ ] Weighted combination: `w1 * bm25 + w2 * vector + w3 * metadata_boost`
-- [ ] Optional: Add reranker for top 50-200 results
+### 3.3 Implement Ranking Fusion ✅
+- [x] Implement Reciprocal Rank Fusion (RRF) for score normalization
+- [x] RRF formula: `score = 0.7/(60+vector_rank) + 0.3/(60+keyword_rank)`
+- [x] Limit candidate pools to top 100 from each source for efficiency
+- [x] Applied to both Stage 1 (docs) and Stage 2 (chunks)
+- **Performance**: Stage1=~20ms, Stage2=~10ms, Total=~80ms (down from 140ms)
 
 ---
 
-## Phase 4: Chunk Enrichment Optimization
+## Phase 4: Chunk Enrichment Optimization 🔄
 
 ### 4.1 Split Enrichment into Tiers
 - [ ] **Tier 1 (always)**: entities, tags, category, quality heuristic
 - [ ] **Tier 2 (on-demand)**: full summary, themes, sentiment
 - [ ] Only deep-enrich frequently retrieved or high-quality chunks
 
-### 4.2 Inherit Doc Properties to Chunks
-- [ ] Copy doc-level title to chunks without titles
-- [ ] Inherit doc themes/sentiment unless chunk contradicts
-- [ ] Reduces LLM calls significantly
+### 4.2 Inherit Doc Properties to Chunks ✅
+- [x] Copy doc-level summary to chunks without summaries
+- [x] Extract title from doc_summary for chunks
+- [x] Infer category from doc_summary content
+- [x] API endpoints: `GET /config/inheritance-stats`, `POST /config/inherit-metadata`
+- [x] Created `backend/src/enrich/inherit_doc_metadata.py`
+- **Results**: ~410k entries enriched via inheritance (no LLM calls needed!)
+- **Remaining**: ~165k entries awaiting parent doc enrichment
 
 ### 4.3 Consider Smaller Chunks
 - [ ] Current: 1000-1500 tokens per chunk

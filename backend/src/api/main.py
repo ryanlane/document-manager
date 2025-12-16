@@ -1906,6 +1906,24 @@ def get_enrichment_config():
             "model": "unknown"
         }
 
+
+@app.get("/config/inheritance-stats")
+def get_inheritance_stats(db: Session = Depends(get_db)):
+    """Get stats on entries that can inherit doc-level metadata."""
+    from src.enrich.inherit_doc_metadata import get_inheritance_stats as get_stats
+    return get_stats(db)
+
+
+@app.post("/config/inherit-metadata")
+def run_inheritance_batch(batch_size: int = 1000, db: Session = Depends(get_db)):
+    """
+    Run a batch of metadata inheritance from docs to entries.
+    Copies doc_summary-derived data to entries missing enrichment.
+    """
+    from src.enrich.inherit_doc_metadata import inherit_doc_metadata_batch
+    return inherit_doc_metadata_batch(db, batch_size)
+
+
 # ============================================================================
 # Link Extraction & Related Documents
 # ============================================================================
