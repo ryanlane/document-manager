@@ -129,14 +129,111 @@ def update_worker_state(update: WorkerStateUpdate):
 
 @app.get("/worker/logs")
 def get_worker_logs(lines: int = 100):
-    """Get the last N lines from the worker log file."""
+    """Get the last N lines from the worker log file using tail for efficiency."""
+    import subprocess
+    
     try:
         if not os.path.exists(WORKER_LOG_FILE):
             return {"lines": [], "message": "Log file not found. Worker may need to be restarted."}
         
-        with open(WORKER_LOG_FILE, 'r') as f:
-            all_lines = f.readlines()
+        # Use tail for efficient reading of large files
+        # Limit to max 1000 lines to prevent memory issues
+        lines = min(lines, 1000)
+        
+        try:
+            result = subprocess.run(
+                ['tail', '-n', str(lines), WORKER_LOG_FILE],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                log_lines = result.stdout.splitlines(keepends=True)
+                return {"lines": log_lines}
+            else:
+                # Fallback: read last portion of file directly
+                pass
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            # tail not available or timed out, use Python fallback
+            pass
+        
+        # Python fallback: read only the end of the file
+        # Estimate ~200 bytes per line, read extra to be safe
+        chunk_size = lines * 300
+        with open(WORKER_LOG_FILE, 'rb') as f:
+            f.seek(0, 2)  # Go to end
+            file_size = f.tell()
+            start_pos = max(0, file_size - chunk_size)
+            f.seek(start_pos)
+            content = f.read().decode('utf-8', errors='replace')
+            all_lines = content.splitlines(keepends=True)
+            # Skip first line if we started mid-line
+            if start_pos > 0 and all_lines:
+                all_lines = all_lines[1:]
             return {"lines": all_lines[-lines:]}
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/worker/logs/rotate")
+def rotate_worker_logs():
+    """Rotate the worker log file - keeps last 10000 lines, archives the rest."""
+    import subprocess
+    from datetime import datetime
+    
+    try:
+        if not os.path.exists(WORKER_LOG_FILE):
+            return {"message": "No log file to rotate"}
+        
+        # Get file size
+        file_size = os.path.getsize(WORKER_LOG_FILE)
+        if file_size < 10 * 1024 * 1024:  # Less than 10MB, no need to rotate
+            return {"message": "Log file is small, no rotation needed", "size_mb": round(file_size / (1024*1024), 2)}
+        
+        # Use tail to keep last 10000 lines
+        try:
+            result = subprocess.run(
+                ['tail', '-n', '10000', WORKER_LOG_FILE],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                # Archive old log
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                archive_path = f"{WORKER_LOG_FILE}.{timestamp}"
+                os.rename(WORKER_LOG_FILE, archive_path)
+                
+                # Write the last 10000 lines to new log file
+                with open(WORKER_LOG_FILE, 'w') as f:
+                    f.write(result.stdout)
+                
+                # Compress archive (optional, in background)
+                subprocess.Popen(['gzip', archive_path])
+                
+                new_size = os.path.getsize(WORKER_LOG_FILE)
+                return {
+                    "message": "Log rotated successfully",
+                    "old_size_mb": round(file_size / (1024*1024), 2),
+                    "new_size_mb": round(new_size / (1024*1024), 2),
+                    "archived_to": f"{archive_path}.gz"
+                }
+        except Exception as e:
+            return {"error": f"Rotation failed: {str(e)}"}
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/worker/logs")
+def clear_worker_logs():
+    """Clear the worker log file."""
+    try:
+        if os.path.exists(WORKER_LOG_FILE):
+            # Truncate the file
+            with open(WORKER_LOG_FILE, 'w') as f:
+                f.write("")
+            return {"message": "Log file cleared"}
+        return {"message": "No log file to clear"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

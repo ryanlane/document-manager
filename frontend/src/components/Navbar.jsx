@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, FileText, Activity, Menu, X, ScrollText, BookOpen, Image, Settings, Orbit } from 'lucide-react'
+import { Home, FolderOpen, Activity, Menu, X, ScrollText, BookOpen, Settings, Orbit } from 'lucide-react'
 import { useState } from 'react'
 import styles from './Navbar.module.css'
 import Logo from './Logo'
@@ -30,11 +30,8 @@ function Navbar() {
           <Link to="/" className={`${styles.link} ${isActive('/')}`} onClick={() => setIsOpen(false)}>
             <Home size={18} /> Search
           </Link>
-          <Link to="/files" className={`${styles.link} ${isActive('/files')}`} onClick={() => setIsOpen(false)}>
-            <FileText size={18} /> Files
-          </Link>
-          <Link to="/gallery" className={`${styles.link} ${isActive('/gallery')}`} onClick={() => setIsOpen(false)}>
-            <Image size={18} /> Gallery
+          <Link to="/browse" className={`${styles.link} ${location.pathname.startsWith('/browse') ? styles.active : ''}`} onClick={() => setIsOpen(false)}>
+            <FolderOpen size={18} /> Browse
           </Link>
           <Link to="/dashboard" className={`${styles.link} ${isActive('/dashboard')}`} onClick={() => setIsOpen(false)}>
             <Activity size={18} /> Dashboard

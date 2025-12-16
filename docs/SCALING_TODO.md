@@ -1,4 +1,4 @@
-# Document Manager - Scaling & Architecture Improvements
+ # Document Manager - Scaling & Architecture Improvements
 
 > **Goal**: Scale the RAG pipeline to handle 8M+ entries efficiently with two-stage retrieval, proper indexing, and optimized enrichment.
 

@@ -74,6 +74,12 @@
   color: var(--color-primary);
 }
 
+.iconBtn.danger:hover {
+  background: rgba(255, 100, 100, 0.1);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
 .refreshBtn {
   display: flex;
   align-items: center;

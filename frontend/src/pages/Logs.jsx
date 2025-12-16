@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { 
   ArrowLeft, RefreshCw, Filter, Clock, FileText, Layers, Sparkles, 
   Binary, AlertCircle, CheckCircle, Info, ChevronDown, ChevronUp,
-  Pause, Play, Search, X, Download, Zap
+  Pause, Play, Search, X, Download, Zap, Trash2, RotateCcw
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './Logs.module.css'
@@ -211,6 +211,36 @@ function Logs() {
     URL.revokeObjectURL(url)
   }
 
+  const rotateLogs = async () => {
+    if (!confirm('Rotate logs? This will archive the current log file and start fresh.')) return
+    try {
+      const res = await fetch('/api/worker/logs/rotate', { method: 'POST' })
+      const data = await res.json()
+      if (data.message) {
+        alert(data.message)
+        fetchLogs()
+      }
+    } catch (err) {
+      console.error('Failed to rotate logs:', err)
+      alert('Failed to rotate logs')
+    }
+  }
+
+  const clearLogs = async () => {
+    if (!confirm('Clear all logs? This cannot be undone.')) return
+    try {
+      const res = await fetch('/api/worker/logs', { method: 'DELETE' })
+      const data = await res.json()
+      if (data.message) {
+        alert(data.message)
+        fetchLogs()
+      }
+    } catch (err) {
+      console.error('Failed to clear logs:', err)
+      alert('Failed to clear logs')
+    }
+  }
+
   const StageIcon = STAGES[stageFilter]?.icon || Layers
 
   return (
@@ -236,6 +266,20 @@ function Logs() {
             title="Download logs"
           >
             <Download size={18} />
+          </button>
+          <button 
+            className={styles.iconBtn}
+            onClick={rotateLogs}
+            title="Rotate logs (archive old, start fresh)"
+          >
+            <RotateCcw size={18} />
+          </button>
+          <button 
+            className={`${styles.iconBtn} ${styles.danger}`}
+            onClick={clearLogs}
+            title="Clear all logs"
+          >
+            <Trash2 size={18} />
           </button>
           <button onClick={fetchLogs} className={styles.refreshBtn}>
             <RefreshCw size={16} className={autoRefresh ? styles.spinning : ''} /> Refresh

@@ -1,13 +1,12 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Home from './pages/Home'
 import DocumentView from './pages/DocumentView'
-import Files from './pages/Files'
+import Browse from './pages/Browse'
 import Dashboard from './pages/Dashboard'
 import Logs from './pages/Logs'
 import ResolveLink from './pages/ResolveLink'
 import HowItWorks from './pages/HowItWorks'
-import Gallery from './pages/Gallery'
 import Settings from './pages/Settings'
 import EntryInspector from './pages/EntryInspector'
 import EmbeddingViz from './pages/EmbeddingViz'
@@ -19,8 +18,9 @@ function App() {
       <div style={{ paddingTop: '60px' }}>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/files" element={<Files />} />
-          <Route path="/gallery" element={<Gallery />} />
+          <Route path="/browse" element={<Browse />} />
+          <Route path="/files" element={<Navigate to="/browse?tab=files" replace />} />
+          <Route path="/gallery" element={<Navigate to="/browse?tab=images" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
