@@ -1,0 +1,41 @@
+# Docker Compose override for distributed worker using oak's Ollama (1070 Ti)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.oak.yml up -d worker-oak
+
+services:
+  worker-oak:
+    build: ./backend
+    volumes:
+      - ./backend:/app
+      - ./config:/app/config
+      - ./archive_root:/data/archive
+      - /mnt/mediaboy/story:/data/archive/story
+      - worker_shared:/app/shared
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-archive_brain}
+      - TIKA_URL=http://tika:9998
+      # Use oak's Ollama (1070 Ti)
+      - OLLAMA_URL=http://192.168.1.19:11434
+      - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-llava}
+    depends_on:
+      db:
+        condition: service_started
+      tika:
+        condition: service_started
+    command: python -m src.worker_loop
+    networks:
+      - archive_net
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 512M

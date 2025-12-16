@@ -156,6 +156,77 @@ def get_worker_progress():
         "embed": read_progress(EMBED_PROGRESS_FILE, "idle")
     }
 
+@app.get("/worker/stats")
+def get_worker_stats(db: Session = Depends(get_db)):
+    """Get comprehensive worker statistics including ETAs."""
+    from datetime import datetime, timedelta
+    
+    # Get counts by status
+    status_counts = db.execute(text("""
+        SELECT status, COUNT(*) as count 
+        FROM entries 
+        GROUP BY status
+    """)).fetchall()
+    
+    counts = {row[0]: row[1] for row in status_counts}
+    total_entries = sum(counts.values())
+    
+    pending = counts.get('pending', 0)
+    enriched = counts.get('enriched', 0)
+    embedded = db.query(Entry).filter(Entry.embedding.isnot(None)).count()
+    
+    # Get recent enrichment rate (last hour)
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    recent_enriched = db.execute(text("""
+        SELECT COUNT(*) FROM entries 
+        WHERE status = 'enriched' 
+        AND updated_at > :cutoff
+    """), {"cutoff": one_hour_ago}).scalar() or 0
+    
+    # Calculate rate per minute
+    enrich_rate_per_min = recent_enriched / 60 if recent_enriched > 0 else 0
+    
+    # Calculate ETA
+    eta_minutes = pending / enrich_rate_per_min if enrich_rate_per_min > 0 else None
+    eta_hours = eta_minutes / 60 if eta_minutes else None
+    eta_days = eta_hours / 24 if eta_hours else None
+    
+    # Format ETA string
+    if eta_days is None:
+        eta_str = "Calculating..."
+    elif eta_days > 365:
+        eta_str = f"{eta_days/365:.1f} years"
+    elif eta_days > 30:
+        eta_str = f"{eta_days/30:.1f} months"
+    elif eta_days > 1:
+        eta_str = f"{eta_days:.1f} days"
+    elif eta_hours > 1:
+        eta_str = f"{eta_hours:.1f} hours"
+    else:
+        eta_str = f"{eta_minutes:.0f} minutes"
+    
+    return {
+        "counts": {
+            "total": total_entries,
+            "pending": pending,
+            "enriched": enriched,
+            "embedded": embedded,
+            "error": counts.get('error', 0)
+        },
+        "rates": {
+            "enrich_per_minute": round(enrich_rate_per_min, 2),
+            "enrich_per_hour": recent_enriched,
+            "sample_period": "1 hour"
+        },
+        "eta": {
+            "pending_count": pending,
+            "eta_minutes": round(eta_minutes, 0) if eta_minutes else None,
+            "eta_hours": round(eta_hours, 1) if eta_hours else None,
+            "eta_days": round(eta_days, 1) if eta_days else None,
+            "eta_string": eta_str
+        }
+    }
+
 @app.get("/system/status")
 def get_system_status():
     ollama_status = "offline"

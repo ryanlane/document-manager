@@ -110,13 +110,13 @@ def run_pipeline():
             # 3. Enrich
             if state.get("enrich", True):
                 logger.info("--- Starting Enrichment Phase ---")
-                for _ in range(5): 
+                for _ in range(50):  # 50 iterations x 100 batch = 5000 entries/cycle
                     enrich_main()
                 
             # 4. Embed
             if state.get("embed", True):
                 logger.info("--- Starting Embedding Phase ---")
-                for _ in range(5):
+                for _ in range(10):  # More embedding iterations
                     embed_main()
                 
             logger.info("Cycle complete. Sleeping for 5 seconds...")

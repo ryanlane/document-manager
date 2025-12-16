@@ -35,8 +35,7 @@ services:
           cpus: '1'
           memory: 512M
 
-  # Ollama LLM service - self-contained inference
-  # For GPU support, see docker-compose.gpu.yml override
+  # Ollama LLM service - self-contained inference with GPU support
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -53,12 +52,11 @@ services:
       start_period: 60s
     deploy:
       resources:
-        limits:
-          cpus: '8'
-          memory: 16G
         reservations:
-          cpus: '2'
-          memory: 4G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # Model initialization - pulls required models on first run
   ollama-init:
@@ -73,7 +71,7 @@ services:
       - |
         echo "Pulling required models..."
         ollama pull nomic-embed-text
-        ollama pull dolphin-phi
+        ollama pull qwen2:1.5b
         ollama pull llava
         echo "Models ready!"
     environment:
@@ -99,7 +97,7 @@ services:
       # Use containerized Ollama by default, can override with external URL
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-dolphin-phi}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-llava}
     depends_on:
@@ -142,7 +140,7 @@ services:
       # Use containerized Ollama by default, can override with external URL
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-dolphin-phi}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-llava}
     depends_on:

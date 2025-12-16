@@ -46,7 +46,7 @@ llm:
   provider: "ollama"
   # Default: containerized Ollama. Override via OLLAMA_URL env var for external
   base_url: "http://ollama:11434"
-  model: "dolphin-phi"
+  model: "qwen2:1.5b"  # Faster model for enrichment (was dolphin-phi)
   embedding_model: "nomic-embed-text"
   vision_model: "llava"
 

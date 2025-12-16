@@ -90,8 +90,10 @@ def update_search_vector(db: Session, entry_id: int):
 MAX_RETRIES = 3
 
 # Parallel processing settings
-ENRICH_WORKERS = 3  # Number of parallel enrichment workers
-ENRICH_BATCH_SIZE = 15  # Entries to process per batch
+# Note: With GPU, Ollama processes one request at a time, so parallelism
+# doesn't help. Use 1 worker with larger batches to reduce overhead.
+ENRICH_WORKERS = 1  # Single worker (GPU serializes LLM calls anyway)
+ENRICH_BATCH_SIZE = 100  # Larger batches to reduce DB/network overhead (qwen2:1.5b is fast)
 
 # Known category folders to detect
 CATEGORY_FOLDERS = ['scifi', 'sci-fi', 'fantasy', 'romance', 'horror', 'mystery', 
