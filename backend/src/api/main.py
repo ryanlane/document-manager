@@ -50,6 +50,18 @@ class AskResponse(BaseModel):
     answer: str
     sources: List[dict]
 
+class ChatMessage(BaseModel):
+    role: str  # 'user', 'assistant', or 'system'
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    model: Optional[str] = None
+
+class ChatResponse(BaseModel):
+    response: str
+    model: str
+
 class FileDetail(BaseModel):
     id: int
     filename: str
@@ -291,24 +303,11 @@ def get_worker_stats(db: Session = Depends(get_db)):
     # Calculate rate per minute
     enrich_rate_per_min = recent_enriched / 60 if recent_enriched > 0 else 0
     
-    # Calculate ETA
-    eta_minutes = pending / enrich_rate_per_min if enrich_rate_per_min > 0 else None
-    eta_hours = eta_minutes / 60 if eta_minutes else None
-    eta_days = eta_hours / 24 if eta_hours else None
+    # Calculate chunk ETA
+    chunk_eta = calculate_eta(pending, enrich_rate_per_min)
     
-    # Format ETA string
-    if eta_days is None:
-        eta_str = "Calculating..."
-    elif eta_days > 365:
-        eta_str = f"{eta_days/365:.1f} years"
-    elif eta_days > 30:
-        eta_str = f"{eta_days/30:.1f} months"
-    elif eta_days > 1:
-        eta_str = f"{eta_days:.1f} days"
-    elif eta_hours > 1:
-        eta_str = f"{eta_hours:.1f} hours"
-    else:
-        eta_str = f"{eta_minutes:.0f} minutes"
+    # Get doc stats with rates
+    doc_stats = get_doc_stats_with_eta(db)
     
     return {
         "counts": {
@@ -323,18 +322,73 @@ def get_worker_stats(db: Session = Depends(get_db)):
             "enrich_per_hour": recent_enriched,
             "sample_period": "1 hour"
         },
-        "eta": {
-            "pending_count": pending,
-            "eta_minutes": round(eta_minutes, 0) if eta_minutes else None,
-            "eta_hours": round(eta_hours, 1) if eta_hours else None,
-            "eta_days": round(eta_days, 1) if eta_days else None,
-            "eta_string": eta_str
-        },
-        "docs": get_doc_stats(db)
+        "eta": chunk_eta,
+        "docs": doc_stats
     }
 
-def get_doc_stats(db: Session) -> dict:
-    """Get doc-level enrichment/embedding stats."""
+def calculate_eta(pending_count: int, rate_per_min: float) -> dict:
+    """Calculate ETA with friendly time string."""
+    if rate_per_min <= 0 or pending_count <= 0:
+        return {
+            "pending_count": pending_count,
+            "eta_minutes": None,
+            "eta_hours": None,
+            "eta_days": None,
+            "eta_string": "Calculating..." if pending_count > 0 else "Complete",
+            "rate_per_min": rate_per_min
+        }
+    
+    eta_minutes = pending_count / rate_per_min
+    eta_hours = eta_minutes / 60
+    eta_days = eta_hours / 24
+    
+    # Format friendly ETA string
+    eta_str = format_friendly_time(eta_minutes)
+    
+    return {
+        "pending_count": pending_count,
+        "eta_minutes": round(eta_minutes, 0),
+        "eta_hours": round(eta_hours, 1),
+        "eta_days": round(eta_days, 1),
+        "eta_string": eta_str,
+        "rate_per_min": round(rate_per_min, 2)
+    }
+
+def format_friendly_time(minutes: float) -> str:
+    """Format minutes into a friendly human-readable string."""
+    if minutes is None or minutes <= 0:
+        return "Complete"
+    
+    if minutes < 1:
+        return "< 1 minute"
+    elif minutes < 60:
+        return f"{int(minutes)} minute{'s' if minutes != 1 else ''}"
+    elif minutes < 60 * 24:
+        hours = minutes / 60
+        remaining_mins = int(minutes % 60)
+        if remaining_mins > 0 and hours < 10:
+            return f"{int(hours)}h {remaining_mins}m"
+        return f"{hours:.1f} hours"
+    elif minutes < 60 * 24 * 7:
+        days = minutes / (60 * 24)
+        remaining_hours = int((minutes % (60 * 24)) / 60)
+        if remaining_hours > 0 and days < 3:
+            return f"{int(days)}d {remaining_hours}h"
+        return f"{days:.1f} days"
+    elif minutes < 60 * 24 * 30:
+        weeks = minutes / (60 * 24 * 7)
+        return f"{weeks:.1f} weeks"
+    elif minutes < 60 * 24 * 365:
+        months = minutes / (60 * 24 * 30)
+        return f"{months:.1f} months"
+    else:
+        years = minutes / (60 * 24 * 365)
+        return f"{years:.1f} years"
+
+def get_doc_stats_with_eta(db: Session) -> dict:
+    """Get doc-level enrichment/embedding stats with ETA."""
+    from datetime import datetime, timedelta
+    
     try:
         result = db.execute(text("""
             SELECT 
@@ -347,16 +401,38 @@ def get_doc_stats(db: Session) -> dict:
             FROM raw_files
         """)).fetchone()
         
+        total, pending, enriched_count, embedded, error, has_embedding = result
+        
+        # Get recent doc enrichment rate (last hour)
+        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        recent_docs = db.execute(text("""
+            SELECT COUNT(*) FROM raw_files 
+            WHERE doc_status IN ('enriched', 'embedded')
+            AND updated_at > :cutoff
+        """), {"cutoff": one_hour_ago}).scalar() or 0
+        
+        doc_rate_per_min = recent_docs / 60 if recent_docs > 0 else 0
+        
+        # Calculate doc enrichment ETA
+        doc_eta = calculate_eta(pending, doc_rate_per_min)
+        
         return {
-            "total": result[0],
-            "pending": result[1],
-            "enriched": result[2],
-            "embedded": result[3],
-            "error": result[4],
-            "has_embedding": result[5]
+            "total": total,
+            "pending": pending,
+            "enriched": enriched_count,
+            "embedded": embedded,
+            "error": error,
+            "has_embedding": has_embedding,
+            "rate_per_min": round(doc_rate_per_min, 2),
+            "rate_per_hour": recent_docs,
+            "eta": doc_eta
         }
     except Exception:
         return {"error": "Could not fetch doc stats"}
+
+def get_doc_stats(db: Session) -> dict:
+    """Get doc-level enrichment/embedding stats (legacy, use get_doc_stats_with_eta)."""
+    return get_doc_stats_with_eta(db)
 
 @app.get("/system/status")
 def get_system_status():
@@ -1734,6 +1810,35 @@ Question: {request.query}
         
     return AskResponse(answer=answer, sources=sources)
 
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(request: ChatRequest):
+    """
+    Simple chat endpoint for direct LLM interaction.
+    Used by two-stage search to generate answers from retrieved context.
+    """
+    # Build prompt from messages
+    prompt_parts = []
+    for msg in request.messages:
+        if msg.role == 'system':
+            prompt_parts.append(f"System: {msg.content}")
+        elif msg.role == 'user':
+            prompt_parts.append(msg.content)
+        elif msg.role == 'assistant':
+            prompt_parts.append(f"Assistant: {msg.content}")
+    
+    prompt = "\n\n".join(prompt_parts)
+    
+    # Use requested model or default
+    model_to_use = request.model if request.model else MODEL
+    response = generate_text(prompt, model=model_to_use)
+    
+    if not response:
+        raise HTTPException(status_code=500, detail="Failed to generate response")
+    
+    return ChatResponse(response=response, model=model_to_use)
+
+
 @app.get("/files/{file_id}/resolve")
 def resolve_relative_path(file_id: int, path: str, db: Session = Depends(get_db)):
     """Resolve a relative path from a source file to a target file ID."""
@@ -2687,6 +2792,7 @@ def get_embedding_viz(entry_id: int, db: Session = Depends(get_db)):
 def visualize_embeddings(
     dimensions: int = 2,
     algorithm: str = "tsne",
+    source: str = "docs",
     category: Optional[str] = None,
     author: Optional[str] = None,
     limit: int = 1000,
@@ -2698,9 +2804,10 @@ def visualize_embeddings(
     Parameters:
     - dimensions: 2 or 3 for 2D/3D visualization
     - algorithm: 'tsne' or 'umap'
+    - source: 'docs' for document-level embeddings, 'entries' for chunk-level
     - category: Optional filter by category
     - author: Optional filter by author
-    - limit: Max number of entries to visualize (default 1000)
+    - limit: Max number of items to visualize (default 1000)
     """
     import numpy as np
     from sklearn.manifold import TSNE
@@ -2719,45 +2826,84 @@ def visualize_embeddings(
     if algorithm == 'umap' and UMAP is None:
         raise HTTPException(status_code=400, detail="UMAP not installed. Use 'tsne' or install umap-learn")
     
-    # Query entries with embeddings (check for embedding presence, not status)
-    query = db.query(Entry).filter(
-        Entry.embedding.isnot(None)
-    )
+    if source not in ['docs', 'entries']:
+        raise HTTPException(status_code=400, detail="source must be 'docs' or 'entries'")
     
-    if category:
-        query = query.filter(Entry.category == category)
-    if author:
-        query = query.filter(Entry.author == author)
-    
-    entries = query.limit(limit).all()
-    
-    if len(entries) < 2:
-        return {
-            "error": "Not enough entries with embeddings",
-            "count": len(entries),
-            "points": []
-        }
-    
-    # Extract embeddings and metadata
+    # Extract embeddings and metadata based on source
     embeddings = []
     metadata = []
     
-    for entry in entries:
-        if entry.embedding is not None and len(entry.embedding) > 0:
-            embeddings.append(entry.embedding)
-            
-            # Get file info
-            raw_file = db.query(RawFile).filter(RawFile.id == entry.file_id).first()
-            
-            metadata.append({
-                "entry_id": entry.id,
-                "title": entry.title or "Untitled",
-                "category": entry.category or "Unknown",
-                "author": entry.author or "Unknown",
-                "file_type": raw_file.extension if raw_file else "unknown",
-                "filename": raw_file.filename if raw_file else "",
-                "summary": (entry.summary or "")[:100]  # First 100 chars
-            })
+    if source == 'docs':
+        # Query raw_files with doc embeddings
+        query = db.query(RawFile).filter(
+            RawFile.doc_embedding.isnot(None)
+        )
+        
+        # For docs, we filter by checking entries with matching category/author
+        if category or author:
+            subquery = db.query(Entry.file_id).distinct()
+            if category:
+                subquery = subquery.filter(Entry.category == category)
+            if author:
+                subquery = subquery.filter(Entry.author == author)
+            query = query.filter(RawFile.id.in_(subquery))
+        
+        raw_files = query.limit(limit).all()
+        
+        for rf in raw_files:
+            if rf.doc_embedding is not None and len(rf.doc_embedding) > 0:
+                embeddings.append(rf.doc_embedding)
+                
+                # Get category/author from first entry of this file
+                first_entry = db.query(Entry).filter(Entry.file_id == rf.id).first()
+                entry_count = db.query(Entry).filter(Entry.file_id == rf.id).count()
+                
+                metadata.append({
+                    "file_id": rf.id,
+                    "title": rf.filename or "Untitled",
+                    "filename": rf.filename,
+                    "category": first_entry.category if first_entry else "Unknown",
+                    "author": first_entry.author if first_entry else "Unknown",
+                    "file_type": rf.extension or "unknown",
+                    "summary": (rf.doc_summary or "")[:100],
+                    "entry_count": entry_count
+                })
+    else:
+        # Query entries with embeddings (existing logic)
+        query = db.query(Entry).filter(
+            Entry.embedding.isnot(None)
+        )
+        
+        if category:
+            query = query.filter(Entry.category == category)
+        if author:
+            query = query.filter(Entry.author == author)
+        
+        entries = query.limit(limit).all()
+        
+        for entry in entries:
+            if entry.embedding is not None and len(entry.embedding) > 0:
+                embeddings.append(entry.embedding)
+                
+                # Get file info
+                raw_file = db.query(RawFile).filter(RawFile.id == entry.file_id).first()
+                
+                metadata.append({
+                    "entry_id": entry.id,
+                    "title": entry.title or "Untitled",
+                    "category": entry.category or "Unknown",
+                    "author": entry.author or "Unknown",
+                    "file_type": raw_file.extension if raw_file else "unknown",
+                    "filename": raw_file.filename if raw_file else "",
+                    "summary": (entry.summary or "")[:100]
+                })
+    
+    if len(embeddings) < 2:
+        return {
+            "error": f"Not enough {source} with embeddings",
+            "count": len(embeddings),
+            "points": []
+        }
     
     # Convert to numpy array
     embeddings_array = np.array(embeddings)
@@ -2788,16 +2934,17 @@ def visualize_embeddings(
             point['z'] = float(coords[2])
         points.append(point)
     
-    # Get unique categories and authors for legend
-    categories = list(set(p['category'] for p in points))
-    authors = list(set(p['author'] for p in points))
-    file_types = list(set(p['file_type'] for p in points))
+    # Get unique categories and authors for legend (filter out None values)
+    categories = list(set(p['category'] for p in points if p['category']))
+    authors = list(set(p['author'] for p in points if p['author']))
+    file_types = list(set(p['file_type'] for p in points if p['file_type']))
     
     return {
         "points": points,
         "count": len(points),
         "dimensions": dimensions,
         "algorithm": algorithm,
+        "source": source,
         "categories": sorted(categories),
         "authors": sorted(authors),
         "file_types": sorted(file_types)

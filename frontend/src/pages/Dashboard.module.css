@@ -139,6 +139,65 @@
   border-radius: var(--radius-sm);
 }
 
+/* Model Info Row */
+.modelInfo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modelBadge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: help;
+}
+
+.modelBadge svg {
+  color: var(--color-primary);
+}
+
+.rateBadge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.etaBadge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.etaInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px dashed var(--color-border);
+}
+
 /* Stats Row */
 .statsRow {
   display: grid;
@@ -215,6 +274,29 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-muted);
+}
+
+.progressRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.etaTag {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-xs);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.etaDivider {
+  color: var(--color-text-muted);
+  opacity: 0.5;
 }
 
 .progressTrack {

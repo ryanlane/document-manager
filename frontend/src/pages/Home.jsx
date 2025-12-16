@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, BookOpen, FileText, Server, Info, Zap, Type, Layers } from 'lucide-react'
+import { Search, BookOpen, FileText, Server, Info, Zap, Type, Layers, Target } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import styles from './Home.module.css'
 
@@ -50,29 +50,92 @@ function Home() {
     if (filters.tags) activeFilters.tags = filters.tags.split(',').map(t => t.trim()).filter(Boolean)
 
     try {
-      // Fetch explained search results if explainer is on
-      if (showExplainer) {
-        const explainRes = await fetch(`/api/search/explain?query=${encodeURIComponent(query)}&k=5&mode=${searchMode}`)
-        const explainData = await explainRes.json()
-        setSearchExplanation(explainData)
-      }
+      // Use two-stage search for better performance on large collections
+      if (searchMode === 'two_stage') {
+        // Two-stage: first get search results, then ask with those results
+        const searchRes = await fetch('/api/search/two-stage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query,
+            k: 5,
+            stage1_docs: 20,
+            filters: Object.keys(activeFilters).length > 0 ? activeFilters : null
+          })
+        })
+        const searchData = await searchRes.json()
+        
+        if (showExplainer) {
+          setSearchExplanation({
+            query,
+            search_mode: 'two_stage',
+            timing: searchData.timing,
+            stages: searchData.stages,
+            results: searchData.entries?.map(e => ({
+              title: e.title,
+              filename: e.file_path?.split('/').pop(),
+              similarity_score: 0.9 // RRF doesn't give raw similarity
+            })) || []
+          })
+        }
+        
+        // Build context from search results and ask LLM
+        if (searchData.entries && searchData.entries.length > 0) {
+          const context = searchData.entries.map((e, i) => 
+            `Document ${i+1}:\nTitle: ${e.title || 'Untitled'}\nContent: ${e.entry_text}\n`
+          ).join('\n')
+          
+          const askRes = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{
+                role: 'user',
+                content: `You are my personal archive assistant.\nUse ONLY the following documents to answer the question.\nIf the answer is not in these documents, say "I can't find that in this archive."\n\nDocuments:\n${context}\n\nQuestion: ${query}`
+              }],
+              model: selectedModel
+            })
+          })
+          const askData = await askRes.json()
+          
+          setResult({
+            answer: askData.response || askData.message || 'No response generated.',
+            sources: searchData.entries.map(e => ({
+              id: e.id,
+              file_id: e.doc_id,
+              title: e.title,
+              path: e.file_path
+            })),
+            timing: searchData.timing
+          })
+        } else {
+          setResult({ answer: "I couldn't find any relevant documents in the archive.", sources: [] })
+        }
+      } else {
+        // Fetch explained search results if explainer is on
+        if (showExplainer) {
+          const explainRes = await fetch(`/api/search/explain?query=${encodeURIComponent(query)}&k=5&mode=${searchMode}`)
+          const explainData = await explainRes.json()
+          setSearchExplanation(explainData)
+        }
 
-      const response = await fetch('/api/ask', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          query, 
-          k: 5,
-          model: selectedModel,
-          filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
-          search_mode: searchMode
-        }),
-      })
-      
-      const data = await response.json()
-      setResult(data)
+        const response = await fetch('/api/ask', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            query, 
+            k: 5,
+            model: selectedModel,
+            filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
+            search_mode: searchMode
+          }),
+        })
+        
+        const data = await response.json()
+        setResult(data)
+      }
     } catch (error) {
       console.error('Error:', error)
       setResult({ answer: 'Error connecting to the archive brain.', sources: [] })
@@ -169,7 +232,31 @@ function Home() {
             >
               <Layers size={14} /> Hybrid
             </button>
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${searchMode === 'two_stage' ? styles.active : ''}`}
+              onClick={() => handleSearchModeChange('two_stage')}
+              title="Two-stage: doc-level first (fast), then chunks with RRF ranking (~80ms)"
+            >
+              <Target size={14} /> Two-Stage
+            </button>
           </div>
+        </div>
+
+        {/* Inline help for active search mode */}
+        <div className={styles.searchModeHelp}>
+          {searchMode === 'vector' && (
+            <p><Zap size={12} /> <strong>Semantic Search</strong> — Your query is converted to a 768-dimensional vector and compared against document embeddings using cosine similarity. Best for conceptual queries where exact words may not appear in results.</p>
+          )}
+          {searchMode === 'keyword' && (
+            <p><Type size={12} /> <strong>Keyword Search</strong> — Traditional full-text search using PostgreSQL's tsvector with BM25 ranking. Best when you know exact terms or phrases that appear in your documents.</p>
+          )}
+          {searchMode === 'hybrid' && (
+            <p><Layers size={12} /> <strong>Hybrid Search</strong> — Combines semantic (70%) and keyword (30%) scores for balanced results. Good general-purpose mode when you're not sure which approach works best.</p>
+          )}
+          {searchMode === 'two_stage' && (
+            <p><Target size={12} /> <strong>Two-Stage Search</strong> — Fastest mode for large archives. Stage 1 finds top 20 relevant documents using doc-level embeddings (~20ms). Stage 2 searches only those docs for the best chunks (~10ms). Uses Reciprocal Rank Fusion for robust ranking.</p>
+          )}
         </div>
 
         {showAdvanced && (
@@ -207,7 +294,14 @@ function Home() {
 
       {result && (
         <div className={styles.resultCard}>
-          <h3>Answer</h3>
+          <h3>
+            Answer
+            {result.timing && (
+              <span className={styles.timingBadge} title="Search time breakdown">
+                {result.timing.total_ms || (result.timing.stage1_ms + result.timing.stage2_ms)}ms
+              </span>
+            )}
+          </h3>
           <div className={styles.answer}>
             {result.answer}
           </div>
@@ -255,6 +349,12 @@ function Home() {
                 Hybrid mode combines semantic similarity (70%) with keyword matching (30%)
               </p>
             )}
+            {searchExplanation.search_mode === 'two_stage' && (
+              <p className={styles.explainerNote}>
+                Two-stage uses Reciprocal Rank Fusion: Stage 1 finds {searchExplanation.stages?.stage1?.docs_returned || 20} relevant docs (~{searchExplanation.timing?.stage1_ms || 20}ms), 
+                Stage 2 ranks {searchExplanation.stages?.stage2?.chunks_returned || 5} chunks (~{searchExplanation.timing?.stage2_ms || 10}ms)
+              </p>
+            )}
           </div>
 
           {searchExplanation.results && searchExplanation.results.length > 0 && (
@@ -292,6 +392,8 @@ function Home() {
                 "Traditional keyword matching using BM25 algorithm to find documents containing your search terms."}
               {searchExplanation.search_mode === 'hybrid' && 
                 "Combined semantic understanding (vector similarity) with keyword matching for better accuracy."}
+              {searchExplanation.search_mode === 'two_stage' && 
+                "Two-stage retrieval: First searches 125k+ doc-level embeddings with RRF ranking, then dives into the top 20 docs to find the best chunks. Optimized for large archives (~80ms total)."}
             </p>
           </div>
         </div>

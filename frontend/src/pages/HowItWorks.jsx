@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Info, Cpu, Database, Search, FileText, Zap, BookOpen, ArrowRight, ChevronDown, ChevronUp, Calculator } from 'lucide-react'
+import { Info, Cpu, Database, Search, FileText, Zap, BookOpen, ArrowRight, ChevronDown, ChevronUp, Calculator, Layers, Target, FileCheck } from 'lucide-react'
 import styles from './HowItWorks.module.css'
 
 function HowItWorks() {
@@ -49,9 +49,10 @@ function HowItWorks() {
         'Supports .txt, .md, .html, and more (PDF/DOCX via Tika)',
         'Computes SHA256 hash to detect changes',
         'Extracts raw text content',
-        'Detects series information from filenames'
+        'Detects series information from filenames',
+        'Stores author_key and source for filtering'
       ],
-      techNote: 'Files are stored in PostgreSQL with their full text for fast retrieval.'
+      techNote: 'Files are stored in PostgreSQL with their full text. Each file becomes a "document" in the system.'
     },
     {
       id: 'segment',
@@ -65,68 +66,98 @@ function HowItWorks() {
         'Adds 200 character overlap between chunks for context',
         'Preserves markdown headers as context markers',
         'Deduplicates identical content across files',
-        'Extracts links/URLs for relationship mapping'
+        'Each chunk inherits source/author from parent document'
       ],
-      techNote: 'Overlap ensures context isn\'t lost at chunk boundaries. Each chunk becomes an "entry" in the database.'
+      techNote: 'Average document has ~66 chunks. Each chunk becomes an "entry" in the database for fine-grained search.'
     },
     {
-      id: 'enrich',
-      title: '3. Enrich (LLM)',
-      icon: <Cpu size={24} />,
-      color: '#FF9800',
-      summary: 'An LLM analyzes each chunk and extracts structured metadata.',
+      id: 'doc-enrich',
+      title: '3a. Doc Enrich',
+      icon: <FileCheck size={24} />,
+      color: '#a855f7',
+      summary: 'Documents are summarized at the doc-level for fast coarse search.',
       details: [
-        'Sends chunk text to local Ollama LLM',
-        'Extracts: title, author, tags, summary',
-        'Detects category from folder structure',
-        'Calculates quality score (0-1)',
-        'Runs in parallel (3 workers)',
-        'Retries failed entries up to 3 times'
+        'Generates a doc_summary from first ~4000 chars of document',
+        'LLM extracts title, category, and key themes',
+        'Much faster than enriching every chunk individually',
+        'Doc-level metadata can be inherited by chunks',
+        'Enables two-stage search (search docs first, then chunks)'
       ],
-      techNote: 'This is the most time-consuming step. Each entry requires an LLM inference call.'
+      techNote: 'Doc enrichment is ~66x faster than chunk enrichment since we process 1 doc instead of 66 chunks.'
     },
     {
-      id: 'embed',
-      title: '4. Embed',
+      id: 'doc-embed',
+      title: '3b. Doc Embed',
+      icon: <Target size={24} />,
+      color: '#06b6d4',
+      summary: 'Document summaries are embedded for Stage 1 vector search.',
+      details: [
+        'Creates doc_embedding (768 dims) from doc_summary',
+        'Creates doc_search_vector (tsvector) for keyword search',
+        'Uses IVFFlat index (lists=200) for fast approximate search',
+        'Only ~125k docs to search vs 8M+ chunks',
+        'Enables sub-50ms doc-level retrieval'
+      ],
+      techNote: 'Searching 125k doc embeddings is ~60x faster than searching 8M chunk embeddings.'
+    },
+    {
+      id: 'chunk-enrich',
+      title: '4a. Chunk Enrich',
+      icon: <Cpu size={24} />,
+      color: '#ffc517',
+      summary: 'Chunks can inherit metadata from docs or be enriched individually.',
+      details: [
+        'Chunks inherit title, summary, category from parent doc',
+        'Inheritance is instant (no LLM calls needed)',
+        'High-value chunks can be deep-enriched with full LLM analysis',
+        'Extracts: title, author, tags, summary, entities',
+        'Quality scoring for prioritizing important content'
+      ],
+      techNote: 'Inheritance reduced enrichment time by ~410k LLM calls. Only high-value chunks need individual enrichment.'
+    },
+    {
+      id: 'chunk-embed',
+      title: '4b. Chunk Embed',
       icon: <Database size={24} />,
-      color: '#9C27B0',
-      summary: 'Text is converted into a 768-dimensional vector for semantic search.',
+      color: '#ff6464',
+      summary: 'Chunk text is embedded for Stage 2 fine-grained search.',
       details: [
         'Creates embedding combining: title, author, summary, tags, content',
         'Uses nomic-embed-text model (768 dimensions)',
-        'Stored using pgvector extension in PostgreSQL',
+        'Stored using pgvector with IVFFlat index (lists=2000)',
         'Also creates BM25 search vector for keyword search',
-        'Processed in batches of 10 with 4 parallel workers'
+        'Only searched within top docs from Stage 1'
       ],
-      techNote: 'Embeddings capture semantic meaning, allowing search to find related content even with different words.'
+      techNote: 'With IVFFlat indexing and ivfflat.probes=10, chunk search is ~10ms within filtered doc set.'
     },
     {
       id: 'search',
-      title: '5. Search',
+      title: '5. Two-Stage Search',
       icon: <Search size={24} />,
       color: '#E91E63',
-      summary: 'Your query is embedded and compared against all entries.',
+      summary: 'Queries use doc-level search first, then chunk-level for precision.',
       details: [
-        'Query text is converted to an embedding vector',
-        'Hybrid search combines vector similarity (70%) + keyword match (30%)',
+        'Stage 1: Search doc embeddings to find top 20 relevant documents (~20ms)',
+        'Stage 2: Search chunk embeddings only within those docs (~10ms)',
+        'Uses Reciprocal Rank Fusion (RRF) to combine vector + keyword scores',
+        'RRF formula: score = 0.7/(60+vector_rank) + 0.3/(60+keyword_rank)',
         'Supports filtering by author, category, tags, file type',
-        'Returns top-k most similar entries',
-        'Results include similarity scores for transparency'
+        'Total search time: ~50-80ms for 8M+ chunks'
       ],
-      techNote: 'Cosine distance measures how "close" two vectors are in semantic space.'
+      techNote: 'Two-stage search is ~10x faster than flat search while maintaining quality through RRF ranking.'
     }
   ]
 
   const glossaryTerms = [
-    { term: 'Embedding', definition: 'A numerical vector (list of numbers) that represents the meaning of text. Similar meanings produce similar vectors.' },
-    { term: 'Vector', definition: 'An ordered list of numbers. In this system, a 768-dimensional vector (768 numbers) represents each text chunk.' },
+    { term: 'Two-Stage Search', definition: 'First search at doc-level (fast, coarse), then search chunks within top docs (precise). Dramatically faster for large collections.' },
+    { term: 'RRF (Reciprocal Rank Fusion)', definition: 'A ranking algorithm that combines multiple score sources by their rank positions. More robust than raw score combination.' },
+    { term: 'IVFFlat Index', definition: 'Inverted File Flat index for approximate nearest neighbor search. Clusters vectors into lists for faster querying.' },
+    { term: 'Embedding', definition: 'A numerical vector (768 numbers) that represents the meaning of text. Similar meanings produce similar vectors.' },
     { term: 'Cosine Similarity', definition: 'A measure of how similar two vectors are, based on the angle between them. 1.0 = identical, 0 = unrelated.' },
     { term: 'RAG', definition: 'Retrieval-Augmented Generation. Finding relevant documents first, then using them as context for an LLM to answer questions.' },
-    { term: 'Semantic Search', definition: 'Finding content by meaning rather than exact keywords. "car" can match "automobile" or "vehicle".' },
     { term: 'BM25', definition: 'A traditional keyword ranking algorithm. Good for exact matches. Combined with vector search for hybrid ranking.' },
-    { term: 'Token', definition: 'A unit of text (roughly a word or word-piece). LLMs process text as tokens. ~4 characters per token.' },
-    { term: 'Chunk/Segment', definition: 'A portion of a document. Long documents are split into chunks for better search precision.' },
-    { term: 'pgvector', definition: 'PostgreSQL extension for storing and searching vector embeddings efficiently.' }
+    { term: 'Inheritance', definition: 'Copying doc-level metadata (title, summary, category) to chunks, avoiding expensive per-chunk LLM calls.' },
+    { term: 'pgvector', definition: 'PostgreSQL extension for storing and searching vector embeddings efficiently with support for various index types.' }
   ]
 
   return (
@@ -134,13 +165,18 @@ function HowItWorks() {
       <header className={styles.header}>
         <h1><BookOpen /> How Archive Brain Works</h1>
         <p className={styles.subtitle}>
-          Understanding the RAG pipeline from raw files to semantic search
+          A two-stage RAG pipeline for searching 8M+ entries in under 100ms
         </p>
       </header>
 
       {/* Pipeline Visualization */}
       <section className={styles.pipelineSection}>
         <h2>The Processing Pipeline</h2>
+        <p className={styles.pipelineIntro}>
+          Archive Brain uses a two-stage architecture: documents are enriched and embedded at both the 
+          <strong> doc-level</strong> (for fast coarse search) and <strong>chunk-level</strong> (for precise retrieval).
+          This enables sub-100ms search across millions of entries.
+        </p>
         <div className={styles.pipeline}>
           {stages.map((stage, index) => (
             <div key={stage.id} className={styles.stageWrapper}>

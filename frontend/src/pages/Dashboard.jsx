@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { 
   Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, 
   Play, Pause, Power, RefreshCw, FilePlus, Binary, Sparkles, Search,
-  ArrowRight, FileCheck, Loader2
+  ArrowRight, FileCheck, Loader2, Zap, Box
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './Dashboard.module.css'
@@ -31,19 +31,26 @@ const StatCard = ({ icon: Icon, color, title, value, sub, loading }) => (
   </div>
 )
 
-// Progress bar component
-const ProgressBar = ({ percent, color, label, sublabel, loading, active }) => (
+// Progress bar component with optional ETA
+const ProgressBar = ({ percent, color, label, sublabel, loading, active, eta }) => (
   <div className={styles.progressItem}>
     <div className={styles.progressLabel}>
       <span className={styles.progressTitle}>
         {active && <Loader2 size={14} className={styles.spin} />}
         {label}
       </span>
-      {loading ? (
-        <Skeleton width="3rem" height="1rem" />
-      ) : (
-        <span className={styles.progressPct}>{percent?.toFixed(1) ?? 0}%</span>
-      )}
+      <div className={styles.progressRight}>
+        {eta && eta.eta_string && eta.eta_string !== 'Complete' && (
+          <span className={styles.etaTag} title={`Rate: ${eta.rate_per_min || 0}/min`}>
+            <Clock size={10} /> {eta.eta_string}
+          </span>
+        )}
+        {loading ? (
+          <Skeleton width="3rem" height="1rem" />
+        ) : (
+          <span className={styles.progressPct}>{percent?.toFixed(1) ?? 0}%</span>
+        )}
+      </div>
     </div>
     <div className={styles.progressTrack}>
       <div 
@@ -60,6 +67,8 @@ function Dashboard() {
   const [counts, setCounts] = useState(null)
   const [docCounts, setDocCounts] = useState(null)
   const [workerState, setWorkerState] = useState(null)
+  const [systemStatus, setSystemStatus] = useState(null)
+  const [workerStats, setWorkerStats] = useState(null)
   
   // Secondary data - loads after
   const [storage, setStorage] = useState(null)
@@ -92,6 +101,22 @@ function Dashboard() {
       const data = await res.json()
       setWorkerState(data)
     } catch (err) { console.error('worker state:', err) }
+  }, [])
+
+  const fetchSystemStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/system/status')
+      const data = await res.json()
+      setSystemStatus(data)
+    } catch (err) { console.error('system status:', err) }
+  }, [])
+
+  const fetchWorkerStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/worker/stats')
+      const data = await res.json()
+      setWorkerStats(data)
+    } catch (err) { console.error('worker stats:', err) }
   }, [])
 
   // Lazy secondary loads
@@ -143,6 +168,8 @@ function Dashboard() {
     fetchCounts()
     fetchDocCounts()
     fetchWorkerState()
+    fetchSystemStatus()
+    fetchWorkerStats()
     
     // Load secondary data with slight delay
     const secondaryTimer = setTimeout(() => {
@@ -155,6 +182,7 @@ function Dashboard() {
     const countsInterval = setInterval(fetchCounts, 3000)
     const docCountsInterval = setInterval(fetchDocCounts, 3000)
     const stateInterval = setInterval(fetchWorkerState, 5000)
+    const statsInterval = setInterval(fetchWorkerStats, 5000)
     const storageInterval = setInterval(fetchStorage, 30000)
     
     return () => {
@@ -162,9 +190,10 @@ function Dashboard() {
       clearInterval(countsInterval)
       clearInterval(docCountsInterval)
       clearInterval(stateInterval)
+      clearInterval(statsInterval)
       clearInterval(storageInterval)
     }
-  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchStorage, fetchExtensions, fetchRecent])
+  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchSystemStatus, fetchWorkerStats, fetchStorage, fetchExtensions, fetchRecent])
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 B'
@@ -254,6 +283,27 @@ function Dashboard() {
             <h2><FileCheck size={18} /> Doc-Level</h2>
             <span className={styles.pipelineTag}>Stage 1: Coarse Search</span>
           </div>
+          
+          {/* Model Info for Doc-Level */}
+          {systemStatus?.ollama && (
+            <div className={styles.modelInfo}>
+              <div className={styles.modelBadge} title="LLM used for doc enrichment (summary generation)">
+                <Sparkles size={12} />
+                <span>{systemStatus.ollama.chat_model}</span>
+              </div>
+              <div className={styles.modelBadge} title="Embedding model for doc vectors">
+                <Box size={12} />
+                <span>{systemStatus.ollama.embedding_model}</span>
+              </div>
+              {workerStats?.rates?.enrich_per_minute > 0 && (
+                <div className={styles.rateBadge} title="Current processing rate">
+                  <Zap size={12} />
+                  <span>{workerStats.rates.enrich_per_minute}/min</span>
+                </div>
+              )}
+            </div>
+          )}
+          
           <div className={styles.statsRow}>
             <StatCard 
               icon={FileText} 
@@ -285,6 +335,7 @@ function Dashboard() {
               sublabel={docCounts ? `${docCounts.enriched?.toLocaleString()} / ${docCounts.total?.toLocaleString()}` : null}
               loading={!docCounts}
               active={workerState?.enrich_docs}
+              eta={workerStats?.docs?.eta}
             />
             <ProgressBar 
               percent={docEmbedPct} 
@@ -300,6 +351,16 @@ function Dashboard() {
               <AlertCircle size={14} /> {docCounts.error} errors
             </div>
           )}
+          
+          {/* Rate info for doc processing */}
+          {workerStats?.docs?.rate_per_hour > 0 && (
+            <div className={styles.etaInfo}>
+              <Zap size={12} />
+              <span>{workerStats.docs.rate_per_hour}/hr</span>
+              <span className={styles.etaDivider}>•</span>
+              <span>{workerStats.docs.pending?.toLocaleString()} remaining</span>
+            </div>
+          )}
         </div>
 
         {/* Chunk-Level (Stage 2) */}
@@ -308,6 +369,27 @@ function Dashboard() {
             <h2><Layers size={18} /> Chunk-Level</h2>
             <span className={styles.pipelineTag}>Stage 2: Fine Search</span>
           </div>
+          
+          {/* Model Info for Chunk-Level */}
+          {systemStatus?.ollama && (
+            <div className={styles.modelInfo}>
+              <div className={styles.modelBadge} title="LLM used for chunk enrichment">
+                <Sparkles size={12} />
+                <span>{systemStatus.ollama.chat_model}</span>
+              </div>
+              <div className={styles.modelBadge} title="Embedding model for chunk vectors">
+                <Box size={12} />
+                <span>{systemStatus.ollama.embedding_model}</span>
+              </div>
+              {workerStats?.eta?.eta_string && workerStats.eta.eta_string !== 'Calculating...' && (
+                <div className={styles.etaBadge} title="Estimated time remaining">
+                  <Clock size={12} />
+                  <span>ETA: {workerStats.eta.eta_string}</span>
+                </div>
+              )}
+            </div>
+          )}
+          
           <div className={styles.statsRow}>
             <StatCard 
               icon={Database} 
@@ -339,6 +421,7 @@ function Dashboard() {
               sublabel={counts ? `${counts.entries.enriched?.toLocaleString()} / ${counts.entries.total?.toLocaleString()}` : null}
               loading={!counts}
               active={workerState?.enrich}
+              eta={workerStats?.eta}
             />
             <ProgressBar 
               percent={chunkEmbedPct} 
@@ -349,6 +432,16 @@ function Dashboard() {
               active={workerState?.embed}
             />
           </div>
+          
+          {/* Rate info for chunk processing */}
+          {workerStats?.rates?.enrich_per_hour > 0 && (
+            <div className={styles.etaInfo}>
+              <Zap size={12} />
+              <span>{workerStats.rates.enrich_per_hour}/hr</span>
+              <span className={styles.etaDivider}>•</span>
+              <span>{workerStats.eta?.pending_count?.toLocaleString()} remaining</span>
+            </div>
+          )}
         </div>
       </div>
 

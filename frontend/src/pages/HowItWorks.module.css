@@ -31,7 +31,17 @@
 }
 
 .pipelineSection h2 {
+  margin-bottom: var(--spacing-md);
+}
+
+.pipelineIntro {
+  color: var(--color-text-muted);
   margin-bottom: var(--spacing-lg);
+  line-height: 1.6;
+}
+
+.pipelineIntro strong {
+  color: var(--color-primary);
 }
 
 .pipeline {

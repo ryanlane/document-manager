@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { ArrowLeft, RefreshCw, Loader, Layers, User, FileText, Palette, Settings } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Loader, Layers, User, FileText, Palette, Settings, Database, FileStack } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './EmbeddingViz.module.css'
 
@@ -34,6 +34,7 @@ function EmbeddingViz() {
   const [points, setPoints] = useState([])
   const [dimensions, setDimensions] = useState(2)
   const [algorithm, setAlgorithm] = useState('tsne')
+  const [source, setSource] = useState('docs') // 'docs' or 'entries'
   const [colorBy, setColorBy] = useState('category')
   const [categories, setCategories] = useState([])
   const [authors, setAuthors] = useState([])
@@ -50,6 +51,7 @@ function EmbeddingViz() {
       const params = new URLSearchParams({
         dimensions: dimensions.toString(),
         algorithm: algorithm,
+        source: source,
         limit: '1000'
       })
       
@@ -118,7 +120,9 @@ function EmbeddingViz() {
   }
 
   const handlePointClick = (point) => {
-    if (point && point.entry_id) {
+    if (source === 'docs' && point && point.file_id) {
+      navigate(`/document/${point.file_id}`)
+    } else if (point && point.entry_id) {
       navigate(`/entry/${point.entry_id}`)
     }
   }
@@ -129,6 +133,11 @@ function EmbeddingViz() {
       return (
         <div className={styles.tooltip}>
           <div className={styles.tooltipTitle}>{point.title}</div>
+          {source === 'docs' && point.filename && (
+            <div className={styles.tooltipInfo}>
+              <span className={styles.tooltipLabel}>File:</span> {point.filename}
+            </div>
+          )}
           <div className={styles.tooltipInfo}>
             <span className={styles.tooltipLabel}>Category:</span> {point.category}
           </div>
@@ -141,7 +150,12 @@ function EmbeddingViz() {
           {point.summary && (
             <div className={styles.tooltipSummary}>{point.summary}</div>
           )}
-          <div className={styles.tooltipHint}>Click to view entry</div>
+          {source === 'docs' && point.entry_count !== undefined && (
+            <div className={styles.tooltipInfo}>
+              <span className={styles.tooltipLabel}>Chunks:</span> {point.entry_count}
+            </div>
+          )}
+          <div className={styles.tooltipHint}>Click to view {source === 'docs' ? 'document' : 'entry'}</div>
         </div>
       )
     }
@@ -175,6 +189,31 @@ function EmbeddingViz() {
             <option value="tsne">t-SNE</option>
             <option value="umap">UMAP</option>
           </select>
+        </div>
+
+        <div className={styles.controlGroup}>
+          <label className={styles.controlLabel}>
+            <Database size={16} />
+            Source
+          </label>
+          <div className={styles.sourceToggle}>
+            <button
+              className={`${styles.sourceBtn} ${source === 'docs' ? styles.active : ''}`}
+              onClick={() => setSource('docs')}
+              title="Visualize document-level embeddings (Stage 1 search targets)"
+            >
+              <FileStack size={14} />
+              Docs
+            </button>
+            <button
+              className={`${styles.sourceBtn} ${source === 'entries' ? styles.active : ''}`}
+              onClick={() => setSource('entries')}
+              title="Visualize chunk-level embeddings (Stage 2 search targets)"
+            >
+              <FileText size={14} />
+              Chunks
+            </button>
+          </div>
         </div>
 
         <div className={styles.controlGroup}>
@@ -264,13 +303,13 @@ function EmbeddingViz() {
       {loading ? (
         <div className={styles.loadingContainer}>
           <Loader size={48} className={styles.spinner} />
-          <p>Generating {dimensions}D visualization using {algorithm.toUpperCase()}...</p>
+          <p>Generating {dimensions}D {source === 'docs' ? 'document' : 'chunk'} visualization using {algorithm.toUpperCase()}...</p>
           <p className={styles.loadingHint}>This may take 10-30 seconds for large datasets</p>
         </div>
       ) : points.length === 0 ? (
         <div className={styles.emptyState}>
           <FileText size={48} />
-          <p>No embedded documents found</p>
+          <p>No embedded {source === 'docs' ? 'documents' : 'entries'} found</p>
         </div>
       ) : (
         <>
@@ -308,7 +347,7 @@ function EmbeddingViz() {
           </div>
 
           <div className={styles.legend}>
-            <h3 className={styles.legendTitle}>Legend ({points.length} documents)</h3>
+            <h3 className={styles.legendTitle}>Legend ({points.length} {source === 'docs' ? 'documents' : 'chunks'})</h3>
             <div className={styles.legendItems}>
               {getLegendItems().map((item, idx) => (
                 <div key={idx} className={styles.legendItem}>
@@ -325,15 +364,30 @@ function EmbeddingViz() {
           <div className={styles.info}>
             <h3>What am I looking at?</h3>
             <p>
-              This visualization shows your documents as points in a reduced-dimensional space. 
-              Documents that are semantically similar (have similar meanings) appear closer together.
+              This visualization shows your {source === 'docs' ? 'documents' : 'chunks'} as points in a reduced-dimensional space. 
+              {source === 'docs' ? 'Documents' : 'Chunks'} that are semantically similar (have similar meanings) appear closer together.
             </p>
-            <ul>
-              <li><strong>t-SNE:</strong> Focuses on preserving local structure - nearby points are very similar</li>
-              <li><strong>UMAP:</strong> Better at preserving global structure - clusters represent topic groups</li>
-              <li><strong>Hover</strong> over any point to see document details</li>
-              <li><strong>Click</strong> any point to inspect that entry in detail</li>
-            </ul>
+            <div className={styles.infoSection}>
+              <h4>Two-Stage Search Architecture</h4>
+              <ul>
+                <li><strong>Docs view:</strong> Shows document-level embeddings used in Stage 1 of search (broad retrieval)</li>
+                <li><strong>Chunks view:</strong> Shows entry-level embeddings used in Stage 2 of search (precision ranking)</li>
+              </ul>
+            </div>
+            <div className={styles.infoSection}>
+              <h4>Algorithm Options</h4>
+              <ul>
+                <li><strong>t-SNE:</strong> Focuses on preserving local structure - nearby points are very similar</li>
+                <li><strong>UMAP:</strong> Better at preserving global structure - clusters represent topic groups</li>
+              </ul>
+            </div>
+            <div className={styles.infoSection}>
+              <h4>Interactions</h4>
+              <ul>
+                <li><strong>Hover</strong> over any point to see details</li>
+                <li><strong>Click</strong> any point to inspect that {source === 'docs' ? 'document' : 'entry'} in detail</li>
+              </ul>
+            </div>
           </div>
         </>
       )}

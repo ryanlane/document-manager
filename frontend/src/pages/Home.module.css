@@ -95,6 +95,19 @@
 .resultCard h3 {
   margin-bottom: var(--spacing-md);
   color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.timingBadge {
+  font-size: var(--font-size-sm);
+  font-weight: normal;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-muted);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  cursor: help;
 }
 
 .answer {
@@ -236,6 +249,33 @@
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: white;
+}
+
+.searchModeHelp {
+  background: var(--color-bg-tertiary);
+  border-left: 3px solid var(--color-primary);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: left;
+}
+
+.searchModeHelp p {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  line-height: 1.5;
+}
+
+.searchModeHelp strong {
+  color: var(--color-text);
+}
+
+.searchModeHelp svg {
+  flex-shrink: 0;
+  margin-top: 3px;
 }
 
 /* Explainer Card */
