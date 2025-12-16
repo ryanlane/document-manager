@@ -177,7 +177,8 @@ def enrich_docs_batch(limit: int = DOC_ENRICH_BATCH_SIZE) -> int:
                 """), {"summary": doc_summary, "id": doc_id})
                 
                 enriched_count += 1
-                logger.info(f"Enriched doc {doc_id}: {title[:50]}...")
+                title_preview = (title or raw_file.filename or "Unknown")[:50]
+                logger.info(f"Enriched doc {doc_id}: {title_preview}...")
             else:
                 # Mark as error to avoid retrying immediately
                 raw_file.doc_status = 'error'

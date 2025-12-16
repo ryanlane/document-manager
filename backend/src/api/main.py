@@ -284,6 +284,70 @@ def get_system_status():
         }
     }
 
+# ==================== Lightweight Metrics Endpoints ====================
+# These are fast endpoints for incremental dashboard loading
+
+@app.get("/system/counts")
+def get_system_counts(db: Session = Depends(get_db)):
+    """Fast endpoint - just core counts, no joins or heavy queries."""
+    result = db.execute(text("""
+        SELECT 
+            (SELECT COUNT(*) FROM raw_files) as files_total,
+            (SELECT COUNT(*) FROM raw_files WHERE status = 'ok') as files_processed,
+            (SELECT COUNT(*) FROM entries) as entries_total,
+            (SELECT COUNT(*) FROM entries WHERE status = 'enriched') as entries_enriched,
+            (SELECT COUNT(*) FROM entries WHERE embedding IS NOT NULL) as entries_embedded
+    """)).fetchone()
+    return {
+        "files": {"total": result[0], "processed": result[1]},
+        "entries": {"total": result[2], "enriched": result[3], "embedded": result[4]}
+    }
+
+@app.get("/system/doc-counts")
+def get_doc_counts(db: Session = Depends(get_db)):
+    """Fast endpoint - doc-level stats only."""
+    result = db.execute(text("""
+        SELECT 
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE doc_status = 'pending') as pending,
+            COUNT(*) FILTER (WHERE doc_status IN ('enriched', 'embedded')) as enriched,
+            COUNT(*) FILTER (WHERE doc_status = 'embedded') as embedded,
+            COUNT(*) FILTER (WHERE doc_status IN ('error', 'embed_error')) as error
+        FROM raw_files
+    """)).fetchone()
+    return {
+        "total": result[0], "pending": result[1], 
+        "enriched": result[2], "embedded": result[3], "error": result[4]
+    }
+
+@app.get("/system/storage")
+def get_storage_stats(db: Session = Depends(get_db)):
+    """Storage stats - can be loaded lazily."""
+    from sqlalchemy import func as sql_func
+    size_result = db.query(sql_func.sum(RawFile.size_bytes)).scalar() or 0
+    return {
+        "total_bytes": size_result,
+        "total_mb": round(size_result / (1024 * 1024), 2) if size_result else 0,
+        "total_gb": round(size_result / (1024 * 1024 * 1024), 2) if size_result else 0
+    }
+
+@app.get("/system/extensions")
+def get_extension_stats(db: Session = Depends(get_db)):
+    """Extension breakdown - can be loaded lazily."""
+    from sqlalchemy import func as sql_func
+    ext_counts = db.query(RawFile.extension, sql_func.count(RawFile.id)).group_by(RawFile.extension).order_by(sql_func.count(RawFile.id).desc()).limit(15).all()
+    return [{"ext": ext or "none", "count": count} for ext, count in ext_counts]
+
+@app.get("/system/recent")
+def get_recent_files(db: Session = Depends(get_db), limit: int = 10):
+    """Recent files - can be loaded lazily."""
+    recent_files = db.query(RawFile).order_by(RawFile.created_at.desc()).limit(limit).all()
+    return [
+        {"id": f.id, "filename": f.filename, "status": f.status, 
+         "created_at": f.created_at.isoformat() if f.created_at else None}
+        for f in recent_files
+    ]
+
 @app.get("/system/metrics")
 def get_system_metrics(db: Session = Depends(get_db)):
     from sqlalchemy import func as sql_func
