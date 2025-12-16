@@ -114,7 +114,7 @@ def run_pipeline():
             # 3. Doc-level Enrichment (run before chunk enrichment)
             if state.get("enrich_docs", True):
                 logger.info("--- Starting Doc Enrichment Phase ---")
-                for _ in range(10):  # 10 iterations x 20 batch = 200 docs/cycle
+                for _ in range(5):  # 5 iterations x 20 batch = 100 docs/cycle
                     enrich_docs_main()
             
             # 4. Chunk Enrichment
@@ -126,7 +126,7 @@ def run_pipeline():
             # 5. Doc-level Embedding (fast, run before chunk embedding)
             if state.get("embed_docs", True):
                 logger.info("--- Starting Doc Embedding Phase ---")
-                for _ in range(5):  # 5 iterations x 50 batch = 250 docs/cycle
+                for _ in range(10):  # 10 iterations x 50 batch = 500 docs/cycle
                     embed_docs_main()
                 
             # 6. Chunk Embedding

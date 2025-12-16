@@ -4,20 +4,25 @@
 
 ---
 
-## Current State (Dec 16, 2025)
+## Current State (Dec 16, 2025 - Updated)
 
 | Metric | Value |
 |--------|-------|
 | Total entries (chunks) | 8,244,409 |
 | Total raw_files (docs) | 125,544 |
-| Docs enriched | 162 (0.1%) |
-| Docs embedded | 3,740 (3.0%) |
-| Docs with summary | 4,940 |
+| Docs enriched | ~4,700 (3.7%) |
+| Docs embedded | ~4,600 (3.7%) |
+| Docs pending | ~119,600 (95%) |
 | Entries enriched | ~111,379 (1.4%) |
 | Entries embedded | ~15,520 |
 | Avg chunks per doc | ~66 |
 
-**Active Workers**: asgard (3060) + oak (1070 Ti) running doc enrichment @ ~2 docs/sec combined
+**Active Workers**: asgard (3060) running doc enrichment + embedding @ ~1 doc/sec
+
+**Two-Stage Search**: ✅ Implemented and working
+- Stage 1: ~200ms to search ~4600 doc embeddings
+- Stage 2: ~13ms to search chunks within top N docs
+- Total: ~260ms per query
 
 ---
 
