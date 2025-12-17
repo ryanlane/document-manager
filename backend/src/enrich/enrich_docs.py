@@ -142,6 +142,15 @@ def enrich_docs_batch(limit: int = DOC_ENRICH_BATCH_SIZE) -> int:
             logger.info("No documents pending doc-level enrichment")
             return 0
         
+        # Mark as 'enriching' immediately to prevent other workers from picking them up
+        if doc_ids:
+            db.execute(text("""
+                UPDATE raw_files 
+                SET doc_status = 'enriching'
+                WHERE id = ANY(:ids)
+            """), {"ids": doc_ids})
+            db.commit()
+        
         logger.info(f"Enriching {len(doc_ids)} documents...")
         
         for doc_id in doc_ids:
@@ -209,6 +218,7 @@ def get_doc_enrichment_stats() -> Dict[str, int]:
             SELECT 
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE doc_status = 'pending') as pending,
+                COUNT(*) FILTER (WHERE doc_status = 'enriching') as enriching,
                 COUNT(*) FILTER (WHERE doc_status = 'enriched') as enriched,
                 COUNT(*) FILTER (WHERE doc_status = 'embedded') as embedded,
                 COUNT(*) FILTER (WHERE doc_status = 'error') as error
@@ -218,9 +228,10 @@ def get_doc_enrichment_stats() -> Dict[str, int]:
         return {
             "total": result[0],
             "pending": result[1],
-            "enriched": result[2],
-            "embedded": result[3],
-            "error": result[4]
+            "enriching": result[2],
+            "enriched": result[3],
+            "embedded": result[4],
+            "error": result[5]
         }
     finally:
         db.close()

@@ -530,3 +530,63 @@
     justify-content: center;
   }
 }
+
+/* Inheritance Card */
+.inheritanceCard {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.05));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.inheritanceHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-xs);
+}
+
+.inheritanceHeader svg {
+  color: #8b5cf6;
+}
+
+.inheritanceCount {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  color: #8b5cf6;
+  font-weight: 600;
+}
+
+.inheritanceDesc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--spacing-sm) 0;
+  line-height: 1.4;
+}
+
+.inheritanceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.inheritanceBtn:hover:not(:disabled) {
+  background: #7c3aed;
+}
+
+.inheritanceBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

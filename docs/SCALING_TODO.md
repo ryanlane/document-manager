@@ -10,18 +10,17 @@
 |--------|-------|
 | Total entries (chunks) | 8,244,409 |
 | Total raw_files (docs) | 125,544 |
-| Docs enriched | ~7,678 (6.1%) |
-| Docs embedded | ~7,335 (5.8%) |
-| Docs pending | ~117,866 (94%) |
-| Entries with title | 546,941 (6.6%) |
-| Entries with summary | 548,268 (6.6%) |
-| Entries with category | 555,180 (6.7%) |
+| Docs enriched | ~283 (0.2%) |
+| Docs embedded | ~11,775 (9.4%) |
+| Docs pending | ~111,687 (89%) |
+| Entries enriched | ~111,688 (1.4%) |
+| Entries pending | ~8,132,721 (98.6%) |
 | Avg chunks per doc | ~66 |
 
-**Active Workers**: asgard (3060) + oak (1070 Ti) running doc enrichment + embedding @ ~1 doc/sec
+**Active Workers**: asgard (3060) running doc enrichment @ ~4 sec/doc (~15/min)
 
 **Two-Stage Search**: ✅ Implemented with IVFFlat indexes and RRF ranking
-- Stage 1: ~20ms to search ~7k doc embeddings (with indexes + RRF)
+- Stage 1: ~20ms to search ~12k doc embeddings (with indexes + RRF)
 - Stage 2: ~10ms to search chunks within top N docs
 - Total: ~80ms per query (down from 140ms)
 

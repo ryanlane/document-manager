@@ -18,16 +18,43 @@ logger = logging.getLogger(__name__)
 def extract_title_from_summary(doc_summary: str) -> str | None:
     """
     Extract the document title from doc_summary.
-    Doc summaries typically start with the title followed by a period.
+    Doc summaries typically start with the title followed by a period and description.
     Example: "The Dragon Knight. A story about..." -> "The Dragon Knight"
+    
+    Handles edge cases like filenames (index.html) and common patterns.
     """
     if not doc_summary:
         return None
     
-    # Try to get title before first period (if short enough)
-    first_sentence = doc_summary.split('.')[0].strip()
-    if len(first_sentence) > 5 and len(first_sentence) < 100:
-        return first_sentence
+    # Skip useless titles
+    skip_patterns = ['none', 'index', 'directory listing', 'index of']
+    
+    # Find the first real sentence (skip short segments that might be filenames)
+    parts = doc_summary.split('. ')
+    
+    for i, part in enumerate(parts):
+        part = part.strip()
+        if not part:
+            continue
+            
+        # Skip if it looks like a filename or common skip pattern
+        part_lower = part.lower()
+        if any(skip in part_lower for skip in skip_patterns):
+            continue
+        if part.endswith('.html') or part.endswith('.txt') or part.endswith('.pdf'):
+            continue
+            
+        # Check length bounds
+        if len(part) > 5 and len(part) < 150:
+            # This looks like a real title
+            return part
+    
+    # Fallback: try the whole first "sentence" before period if reasonable
+    first = doc_summary.split('.')[0].strip()
+    if len(first) > 10 and len(first) < 100:
+        first_lower = first.lower()
+        if not any(skip in first_lower for skip in skip_patterns):
+            return first
     
     return None
 
@@ -99,8 +126,10 @@ def inherit_doc_metadata_batch(db: Session, batch_size: int = 500) -> dict:
     
     results = db.execute(sql, {"batch_size": batch_size}).fetchall()
     
+    logger.info(f"Inheritance query returned {len(results)} results for batch_size={batch_size}")
+    
     if not results:
-        return {"inherited": 0, "message": "No entries need inheritance"}
+        return {"inherited": 0, "batch_size": 0, "message": "No entries need inheritance"}
     
     updated_count = 0
     

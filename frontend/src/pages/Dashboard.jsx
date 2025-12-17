@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { 
   Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, 
   Play, Pause, Power, RefreshCw, FilePlus, Binary, Sparkles, Search,
-  ArrowRight, FileCheck, Loader2, Zap, Box
+  ArrowRight, FileCheck, Loader2, Zap, Box, Download, ArrowDown
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './Dashboard.module.css'
@@ -87,6 +87,11 @@ function Dashboard() {
   const [extensions, setExtensions] = useState(null)
   const [recentFiles, setRecentFiles] = useState(null)
   
+  // Inheritance state
+  const [inheritanceStats, setInheritanceStats] = useState(null)
+  const [inheritanceRunning, setInheritanceRunning] = useState(false)
+  const [inheritanceProgress, setInheritanceProgress] = useState({ total: 0, batches: 0 })
+  
   const [lastUpdate, setLastUpdate] = useState(null)
 
   // Fast initial loads
@@ -156,6 +161,50 @@ function Dashboard() {
     } catch (err) { console.error('recent:', err) }
   }, [])
 
+  const fetchInheritanceStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/config/inheritance-stats')
+      const data = await res.json()
+      setInheritanceStats(data)
+    } catch (err) { console.error('inheritance stats:', err) }
+  }, [])
+
+  const runInheritance = async () => {
+    if (inheritanceRunning) return
+    
+    setInheritanceRunning(true)
+    setInheritanceProgress({ total: 0, batches: 0 })
+    
+    let totalInherited = 0
+    let batches = 0
+    
+    while (true) {
+      try {
+        const res = await fetch('/api/config/inherit-metadata?batch_size=5000', { method: 'POST' })
+        const data = await res.json()
+        const count = data.inherited || 0
+        
+        if (count === 0) break
+        
+        totalInherited += count
+        batches++
+        setInheritanceProgress({ total: totalInherited, batches })
+        
+        // Refresh stats periodically
+        if (batches % 5 === 0) {
+          fetchInheritanceStats()
+        }
+      } catch (err) {
+        console.error('inheritance error:', err)
+        break
+      }
+    }
+    
+    setInheritanceRunning(false)
+    fetchInheritanceStats()
+    fetchCounts() // Refresh entry counts
+  }
+
   const updateWorkerState = async (updates) => {
     // Mark the keys as pending
     Object.keys(updates).forEach(key => setPendingToggle(key, true))
@@ -196,6 +245,7 @@ function Dashboard() {
       fetchStorage()
       fetchExtensions()
       fetchRecent()
+      fetchInheritanceStats()
     }, 100)
 
     // Set up polling intervals
@@ -204,6 +254,7 @@ function Dashboard() {
     const stateInterval = setInterval(fetchWorkerState, 5000)
     const statsInterval = setInterval(fetchWorkerStats, 5000)
     const storageInterval = setInterval(fetchStorage, 30000)
+    const inheritanceInterval = setInterval(fetchInheritanceStats, 10000)
     
     return () => {
       clearTimeout(secondaryTimer)
@@ -212,8 +263,9 @@ function Dashboard() {
       clearInterval(stateInterval)
       clearInterval(statsInterval)
       clearInterval(storageInterval)
+      clearInterval(inheritanceInterval)
     }
-  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchSystemStatus, fetchWorkerStats, fetchStorage, fetchExtensions, fetchRecent])
+  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchSystemStatus, fetchWorkerStats, fetchStorage, fetchExtensions, fetchRecent, fetchInheritanceStats])
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 B'
@@ -461,6 +513,39 @@ function Dashboard() {
               <span>{workerStats.rates.enrich_per_hour}/hr</span>
               <span className={styles.etaDivider}>•</span>
               <span>{workerStats.eta?.pending_count?.toLocaleString()} remaining</span>
+            </div>
+          )}
+          
+          {/* Inheritance Quick Action */}
+          {inheritanceStats && inheritanceStats.can_inherit_title > 0 && (
+            <div className={styles.inheritanceCard}>
+              <div className={styles.inheritanceHeader}>
+                <ArrowDown size={16} />
+                <span>Inherit from Docs</span>
+                <span className={styles.inheritanceCount}>
+                  {inheritanceStats.can_inherit_title.toLocaleString()} chunks
+                </span>
+              </div>
+              <p className={styles.inheritanceDesc}>
+                Copy titles & metadata from enriched documents to their chunks (no LLM needed)
+              </p>
+              <button 
+                className={styles.inheritanceBtn}
+                onClick={runInheritance}
+                disabled={inheritanceRunning}
+              >
+                {inheritanceRunning ? (
+                  <>
+                    <Loader2 size={14} className={styles.spin} />
+                    Running... {inheritanceProgress.total.toLocaleString()} inherited
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    Run Inheritance
+                  </>
+                )}
+              </button>
             </div>
           )}
         </div>

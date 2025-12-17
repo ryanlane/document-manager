@@ -4,6 +4,7 @@ Stores user-configurable settings in the database.
 """
 import json
 import logging
+import os
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 from sqlalchemy import Column, String, Text, DateTime, func
@@ -107,7 +108,14 @@ def get_all_settings(db: Session) -> Dict[str, Any]:
 
 
 def get_llm_config(db: Session) -> Dict[str, Any]:
-    """Get the active LLM configuration."""
+    """
+    Get the active LLM configuration.
+    
+    Environment variables can override database settings:
+    - OLLAMA_URL: Override the Ollama URL (for multi-worker setups)
+    - OLLAMA_MODEL: Override the model name
+    - OLLAMA_EMBEDDING_MODEL: Override the embedding model
+    """
     llm_settings = get_setting(db, "llm") or DEFAULT_SETTINGS["llm"]
     provider = llm_settings.get("provider", "ollama")
     
@@ -115,6 +123,18 @@ def get_llm_config(db: Session) -> Dict[str, Any]:
         "provider": provider,
         **llm_settings.get(provider, {})
     }
+    
+    # Allow environment variable overrides for worker flexibility
+    if provider == "ollama":
+        if os.environ.get("OLLAMA_URL"):
+            config["url"] = os.environ["OLLAMA_URL"]
+        if os.environ.get("OLLAMA_MODEL"):
+            config["model"] = os.environ["OLLAMA_MODEL"]
+        if os.environ.get("OLLAMA_EMBEDDING_MODEL"):
+            config["embedding_model"] = os.environ["OLLAMA_EMBEDDING_MODEL"]
+        if os.environ.get("OLLAMA_VISION_MODEL"):
+            config["vision_model"] = os.environ["OLLAMA_VISION_MODEL"]
+    
     return config
 
 
