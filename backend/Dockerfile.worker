@@ -1,0 +1,69 @@
+# Standalone Worker Image for Archive Brain
+# Minimal image for running workers on external machines
+# 
+# Build: docker build -f Dockerfile.worker -t archive-brain-worker .
+# Publish: docker tag archive-brain-worker ghcr.io/ryanlane/archive-brain-worker:latest
+#
+# Run: docker run -d \
+#   -e DATABASE_URL=postgres://user:pass@host:5432/archive_brain \
+#   -e OLLAMA_URL=http://localhost:11434 \
+#   -e WORKER_NAME=my-worker \
+#   archive-brain-worker
+
+FROM python:3.11-slim
+
+LABEL org.opencontainers.image.source=https://github.com/ryanlane/document-manager
+LABEL org.opencontainers.image.description="Archive Brain Worker - Distributed document processing"
+LABEL org.opencontainers.image.licenses=MIT
+
+WORKDIR /app
+
+# Install minimal system dependencies for document processing
+# Note: tesseract is optional but useful for OCR tasks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    libgl1 \
+    libglib2.0-0 \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only the requirements we need
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy only the source code needed for worker operation
+# (not including API code, frontend, or unnecessary files)
+COPY src/__init__.py src/
+COPY src/config.py src/
+COPY src/llm_client.py src/
+COPY src/status.py src/
+COPY src/worker_loop.py src/
+COPY src/db/ src/db/
+COPY src/ingest/ src/ingest/
+COPY src/extract/ src/extract/
+COPY src/segment/ src/segment/
+COPY src/enrich/ src/enrich/
+COPY src/rag/ src/rag/
+COPY src/services/ src/services/
+
+# Default environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Worker configuration environment variables
+# These should be overridden at runtime:
+# - DATABASE_URL: Connection string to PostgreSQL
+# - OLLAMA_URL: URL of Ollama server to use
+# - WORKER_NAME: Display name for this worker (optional, defaults to hostname)
+# - HEARTBEAT_INTERVAL: Seconds between heartbeats (default: 30)
+# - RUN_ONCE: Set to "true" for single-pass mode
+
+# Health check via the worker's internal status
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+  CMD python -c "import psutil; exit(0 if psutil.Process().is_running() else 1)" || exit 1
+
+# Run the worker loop
+CMD ["python", "-m", "src.worker_loop"]

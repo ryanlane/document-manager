@@ -3,6 +3,10 @@ import logging
 import sys
 import os
 import json
+import socket
+import uuid
+import atexit
+import psutil
 
 # Shared paths - must be set before logging config
 if os.path.exists("/app/shared"):
@@ -14,6 +18,7 @@ else:
 STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
 PROGRESS_FILE = os.path.join(SHARED_DIR, "worker_progress.json")
+WORKER_ID_FILE = os.path.join(SHARED_DIR, "worker_id.txt")
 
 # Ensure shared directory exists
 os.makedirs(SHARED_DIR, exist_ok=True)
@@ -43,6 +48,7 @@ from src.rag.embed_docs import main as embed_docs_main
 from src.db.session import SessionLocal
 from src.db.settings import get_llm_config
 from src.llm_client import set_default_client, ensure_models_available
+from src.services import workers as workers_service
 
 # Re-apply file handler to root logger AFTER imports (child modules may have altered config)
 root_logger = logging.getLogger()
@@ -52,6 +58,114 @@ if not file_handler_exists:
     fh = logging.FileHandler(LOG_FILE)
     fh.setFormatter(logging.Formatter(log_format))
     root_logger.addHandler(fh)
+
+# ============================================================================
+# Worker Registration and Heartbeat
+# ============================================================================
+
+# Heartbeat interval in seconds
+HEARTBEAT_INTERVAL = 30
+
+# Worker identification
+WORKER_ID = None
+WORKER_NAME = os.environ.get("WORKER_NAME", socket.gethostname())
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
+
+
+def get_or_create_worker_id() -> str:
+    """Get persistent worker ID or create a new one."""
+    global WORKER_ID
+    if WORKER_ID:
+        return WORKER_ID
+    
+    # Try to load from file (persist across restarts)
+    if os.path.exists(WORKER_ID_FILE):
+        try:
+            with open(WORKER_ID_FILE, 'r') as f:
+                WORKER_ID = f.read().strip()
+                if WORKER_ID:
+                    return WORKER_ID
+        except Exception:
+            pass
+    
+    # Generate new ID
+    short_uuid = str(uuid.uuid4())[:8]
+    WORKER_ID = f"{WORKER_NAME}-{short_uuid}"
+    
+    # Save for next restart
+    try:
+        with open(WORKER_ID_FILE, 'w') as f:
+            f.write(WORKER_ID)
+    except Exception as e:
+        logger.warning(f"Failed to save worker ID: {e}")
+    
+    return WORKER_ID
+
+
+def register_worker():
+    """Register this worker with the database."""
+    worker_id = get_or_create_worker_id()
+    
+    try:
+        db = SessionLocal()
+        worker = workers_service.register_worker(
+            db,
+            worker_id=worker_id,
+            name=WORKER_NAME,
+            ollama_url=OLLAMA_URL,
+            config={
+                "phases": ["ingest", "segment", "enrich", "enrich_docs", "embed", "embed_docs"]
+            },
+            managed=False  # Docker compose workers are considered external
+        )
+        db.close()
+        logger.info(f"Registered as worker: {worker_id}")
+        return worker
+    except Exception as e:
+        logger.warning(f"Failed to register worker: {e}")
+        return None
+
+
+def send_heartbeat(status: str = "active", current_phase: str = None, current_task: str = None):
+    """Send heartbeat to the database."""
+    worker_id = get_or_create_worker_id()
+    
+    try:
+        # Collect stats
+        stats = {
+            "memory_mb": round(psutil.Process().memory_info().rss / 1024 / 1024, 1),
+            "cpu_percent": psutil.Process().cpu_percent()
+        }
+        
+        db = SessionLocal()
+        workers_service.heartbeat(
+            db,
+            worker_id=worker_id,
+            status=status,
+            current_task=current_task,
+            current_phase=current_phase,
+            stats=stats
+        )
+        db.close()
+    except Exception as e:
+        logger.warning(f"Failed to send heartbeat: {e}")
+
+
+def deregister_worker():
+    """Deregister this worker (called on shutdown)."""
+    worker_id = get_or_create_worker_id()
+    
+    try:
+        db = SessionLocal()
+        workers_service.deregister_worker(db, worker_id)
+        db.close()
+        logger.info(f"Deregistered worker: {worker_id}")
+    except Exception as e:
+        logger.warning(f"Failed to deregister worker: {e}")
+
+
+# Register shutdown handler
+atexit.register(deregister_worker)
 
 def get_state():
     """Read the current worker state from file."""
@@ -108,6 +222,10 @@ def check_phase_enabled(state: dict, phase: str) -> bool:
 
 def run_pipeline():
     logger.info("Worker loop started.")
+    
+    # Register this worker with the database
+    register_worker()
+    
     # Initialize state file
     if not os.path.exists(STATE_FILE):
         save_state(get_state())
@@ -119,16 +237,28 @@ def run_pipeline():
     last_config_refresh = 0
     CONFIG_REFRESH_INTERVAL = 60  # Refresh config every minute
     
+    # Heartbeat tracking
+    last_heartbeat_time = 0
+    
     while True:
         state = get_state()
+        current_time = time.time()
+        
+        # Send heartbeat periodically
+        if current_time - last_heartbeat_time > HEARTBEAT_INTERVAL:
+            if state.get("running", True):
+                send_heartbeat(status="active")
+            else:
+                send_heartbeat(status="idle")
+            last_heartbeat_time = current_time
         
         if not state.get("running", True):
             logger.info("Worker paused. Sleeping...")
+            send_heartbeat(status="idle")
             time.sleep(5)
             continue
         
         # Refresh LLM client config from database settings
-        current_time = time.time()
         if current_time - last_config_refresh > CONFIG_REFRESH_INTERVAL:
             try:
                 db = SessionLocal()
@@ -148,6 +278,7 @@ def run_pipeline():
             # 1. Ingest
             # Only run if enabled AND enough time has passed
             if state.get("ingest", True):
+                send_heartbeat(status="active", current_phase="ingest")
                 current_time = time.time()
                 if current_time - last_ingest_time > INGEST_INTERVAL:
                     logger.info("--- Starting Ingestion Phase ---")
@@ -159,11 +290,13 @@ def run_pipeline():
             
             # 2. Segment
             if state.get("segment", True):
+                send_heartbeat(status="active", current_phase="segment")
                 logger.info("--- Starting Segmentation Phase ---")
                 segment_main()
             
             # 3. Doc-level Enrichment (run before chunk enrichment)
             if state.get("enrich_docs", True):
+                send_heartbeat(status="active", current_phase="enrich_docs")
                 logger.info("--- Starting Doc Enrichment Phase ---")
                 total_iterations = 5
                 for i in range(total_iterations):  # 5 iterations x 20 batch = 100 docs/cycle
@@ -178,6 +311,7 @@ def run_pipeline():
             
             # 4. Chunk Enrichment
             if state.get("enrich", True):
+                send_heartbeat(status="active", current_phase="enrich")
                 logger.info("--- Starting Chunk Enrichment Phase ---")
                 total_iterations = 50
                 for i in range(total_iterations):  # 50 iterations x 100 batch = 5000 entries/cycle
@@ -192,6 +326,7 @@ def run_pipeline():
             
             # 5. Doc-level Embedding (fast, run before chunk embedding)
             if state.get("embed_docs", True):
+                send_heartbeat(status="active", current_phase="embed_docs")
                 logger.info("--- Starting Doc Embedding Phase ---")
                 total_iterations = 10
                 for i in range(total_iterations):  # 10 iterations x 50 batch = 500 docs/cycle
@@ -206,6 +341,7 @@ def run_pipeline():
                 
             # 6. Chunk Embedding
             if state.get("embed", True):
+                send_heartbeat(status="active", current_phase="embed")
                 logger.info("--- Starting Chunk Embedding Phase ---")
                 total_iterations = 10
                 for i in range(total_iterations):  # More embedding iterations

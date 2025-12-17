@@ -1027,11 +1027,11 @@ def is_within_schedule(schedule: WorkerSchedule) -> bool:
 
 ### Sprint 1: Core First-Run Experience
 1. ⬜ Setup Wizard (1.1)
-2. ⬜ System Health Check (1.2)
-3. ⬜ **Indexing Strategy Choice (1.4)** ← Prevents 80% of "why is this slow?" questions
-4. ⬜ Model Download from UI (2.1)
-5. ⬜ Generic Jobs Table (2.3)
-6. ⬜ Environment Variable Override Indication (5.3)
+2. ✅ System Health Check (1.2)
+3. ✅ **Indexing Strategy Choice (1.4)** ← Prevents 80% of "why is this slow?" questions
+4. ✅ Model Download from UI (2.1)
+5. ✅ Generic Jobs Table (2.3)
+6. ✅ Environment Variable Override Indication (5.3)
 
 **Why Indexing Strategy is in Sprint 1:**
 - Single choice prevents most "why is this taking forever?" confusion
@@ -1040,11 +1040,11 @@ def is_within_schedule(schedule: WorkerSchedule) -> bool:
 - Default to "Fast Scan" ensures <10 min to first search
 
 ### Sprint 2: Dynamic Worker Infrastructure
-7. ⬜ Ollama Server Registry (7.1)
-8. ⬜ Worker Registration & Heartbeats (7.2)
-9. ⬜ Worker Visibility on Dashboard (7.2)
-10. ⬜ Standalone Worker Image (7.5)
-11. ⬜ **Worker Scheduling (7.7)** ← Essential for shared machines
+7. ✅ Ollama Server Registry (7.1)
+8. ✅ Worker Registration & Heartbeats (7.2)
+9. ✅ Worker Visibility on Dashboard (7.2)
+10. ✅ Standalone Worker Image (7.5)
+11. ✅ **Worker Scheduling (7.7)** ← Essential for shared machines
 
 **Why Sprint 2 is workers:**
 - Core differentiator: "add GPUs from the UI"
@@ -1053,14 +1053,14 @@ def is_within_schedule(schedule: WorkerSchedule) -> bool:
 - Foundation for Scale-out edition
 
 ### Sprint 3: Enhanced Configuration
-11. ⬜ VRAM-based Recommendations (1.3)
-12. ⬜ Model Catalog (2.2)
+11. ✅ VRAM-based Recommendations (1.3)
+12. ✅ Model Catalog (2.2)
 13. ⬜ Folder Browser (3.2)
-14. ⬜ External Worker Spawning UI (7.3)
+14. ✅ External Worker Spawning UI (7.3)
 
 ### Sprint 4: Polish & Help
-15. ⬜ Worker Lifecycle Management (7.4)
-16. ⬜ Progress Notifications - Stage 1 only (4.1)
+15. ✅ Worker Lifecycle Management (7.4)
+16. ✅ Progress Notifications - Stage 1 only (4.1)
 17. ⬜ In-App Help (6.1)
 18. ⬜ Export/Import with Validation (5.1)
 

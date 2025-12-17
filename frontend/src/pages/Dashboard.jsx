@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import JobsPanel from '../components/JobsPanel'
+import WorkersPanel from '../components/WorkersPanel'
 import styles from './Dashboard.module.css'
 
 // Track which toggles are pending
@@ -686,6 +687,9 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Active Workers Panel */}
+      <WorkersPanel compact={true} refreshInterval={10000} />
 
       {/* Background Jobs Panel */}
       <JobsPanel showRecent={true} maxRecent={5} compact={true} />

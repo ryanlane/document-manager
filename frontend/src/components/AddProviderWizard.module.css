@@ -1,0 +1,551 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.wizard {
+  background: var(--bg-secondary, #1e1e2e);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+
+.closeBtn:hover {
+  color: var(--text-primary, #fff);
+  background: var(--bg-tertiary, #2a2a3a);
+}
+
+/* Progress Steps */
+.progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background: var(--bg-tertiary, #16161e);
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.progress svg {
+  color: var(--text-tertiary, #555);
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-tertiary, #555);
+}
+
+.step span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1px solid var(--border-color, #333);
+  font-size: 0.75rem;
+}
+
+.step.active {
+  color: var(--text-primary, #fff);
+}
+
+.step.active span {
+  background: var(--accent-color, #7c3aed);
+  border-color: var(--accent-color, #7c3aed);
+  color: white;
+}
+
+.step.complete span {
+  background: var(--success-color, #10b981);
+  border-color: var(--success-color, #10b981);
+  color: white;
+}
+
+/* Content */
+.content {
+  padding: 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.stepDescription {
+  margin: 0 0 1.5rem;
+  color: var(--text-secondary, #888);
+  font-size: 0.95rem;
+}
+
+/* Type Selection */
+.typeGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.typeSection h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary, #888);
+}
+
+.typeCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.typeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 1rem;
+  background: var(--bg-tertiary, #16161e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.typeCard:hover {
+  border-color: var(--accent-color, #7c3aed);
+  background: var(--bg-secondary, #1e1e2e);
+}
+
+.typeCard strong {
+  color: var(--text-primary, #fff);
+  font-size: 0.9rem;
+}
+
+.typeCard span {
+  color: var(--text-tertiary, #666);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.typeCard svg {
+  color: var(--accent-color, #7c3aed);
+}
+
+/* Form Fields */
+.field {
+  margin-bottom: 1.25rem;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+}
+
+.field input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary, #16161e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-primary, #fff);
+  font-size: 0.95rem;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent-color, #7c3aed);
+}
+
+.field small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-tertiary, #666);
+  font-size: 0.8rem;
+}
+
+.field small a {
+  color: var(--accent-color, #7c3aed);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.field small a:hover {
+  text-decoration: underline;
+}
+
+.apiKeyInput {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.apiKeyInput input {
+  flex: 1;
+}
+
+.apiKeyInput button {
+  padding: 0 0.75rem;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+}
+
+.apiKeyInput button:hover {
+  color: var(--text-primary, #fff);
+}
+
+/* Presets */
+.presets {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.presets span {
+  color: var(--text-tertiary, #666);
+  font-size: 0.85rem;
+}
+
+.presets button {
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-tertiary, #16161e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-secondary, #888);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.presets button:hover {
+  background: var(--bg-secondary, #1e1e2e);
+  color: var(--text-primary, #fff);
+  border-color: var(--accent-color, #7c3aed);
+}
+
+.hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary, #16161e);
+  border-radius: 6px;
+  color: var(--text-secondary, #888);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.hint svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warning-color, #f59e0b);
+}
+
+/* Test Section */
+.testSection {
+  background: var(--bg-tertiary, #16161e);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.testInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #888);
+}
+
+.testInfo strong {
+  color: var(--text-primary, #fff);
+}
+
+.testBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--accent-color, #7c3aed);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.testBtn:hover:not(:disabled) {
+  background: var(--accent-hover, #6d28d9);
+}
+
+.testBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.testResult {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 6px;
+}
+
+.testResult.success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--success-color, #10b981);
+}
+
+.testResult.success svg {
+  color: var(--success-color, #10b981);
+}
+
+.testResult.failure {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid var(--error-color, #ef4444);
+}
+
+.testResult.failure svg {
+  color: var(--error-color, #ef4444);
+}
+
+.testResult div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.testResult strong {
+  color: var(--text-primary, #fff);
+  font-size: 0.95rem;
+}
+
+.testResult span {
+  color: var(--text-secondary, #888);
+  font-size: 0.85rem;
+}
+
+/* Error */
+.error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid var(--error-color, #ef4444);
+  border-radius: 6px;
+  color: var(--error-color, #ef4444);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+/* Success */
+.successBanner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.successBanner svg {
+  color: var(--success-color, #10b981);
+}
+
+.successBanner h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-primary, #fff);
+}
+
+/* Worker Section */
+.workerSection {
+  background: var(--bg-tertiary, #16161e);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+
+.workerSection h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.workerSection p {
+  margin: 0 0 1rem;
+  color: var(--text-secondary, #888);
+  font-size: 0.9rem;
+}
+
+.workerSection small {
+  display: block;
+  margin-top: 1rem;
+  color: var(--text-tertiary, #666);
+  font-size: 0.8rem;
+}
+
+.commandBlock {
+  position: relative;
+  background: #0d0d12;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.commandBlock pre {
+  margin: 0;
+  padding: 1rem;
+  padding-right: 3rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-primary, #fff);
+  font-family: 'Fira Code', 'Monaco', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.commandBlock button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.4rem;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+}
+
+.commandBlock button:hover {
+  color: var(--text-primary, #fff);
+}
+
+/* Cloud Info */
+.cloudInfo {
+  padding: 1.25rem;
+  background: var(--bg-tertiary, #16161e);
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.cloudInfo p {
+  margin: 0;
+  color: var(--text-secondary, #888);
+  font-size: 0.95rem;
+}
+
+.cloudInfo strong {
+  color: var(--text-primary, #fff);
+}
+
+.cloudInfo small {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--text-tertiary, #666);
+  font-size: 0.85rem;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.backBtn, .nextBtn, .saveBtn, .doneBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.backBtn {
+  background: var(--bg-tertiary, #16161e);
+  border: 1px solid var(--border-color, #333);
+  color: var(--text-secondary, #888);
+}
+
+.backBtn:hover {
+  color: var(--text-primary, #fff);
+  border-color: var(--text-tertiary, #555);
+}
+
+.nextBtn, .saveBtn, .doneBtn {
+  background: var(--accent-color, #7c3aed);
+  border: none;
+  color: white;
+  margin-left: auto;
+}
+
+.nextBtn:hover:not(:disabled), 
+.saveBtn:hover:not(:disabled),
+.doneBtn:hover {
+  background: var(--accent-hover, #6d28d9);
+}
+
+.nextBtn:disabled, .saveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

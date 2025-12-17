@@ -1,0 +1,198 @@
+.panel {
+  background: var(--color-surface, #1e1e1e);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.panel.compact {
+  padding: 12px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.header h3 {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.count {
+  display: flex;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+
+.activeCount {
+  color: #4caf50;
+}
+
+.idleCount {
+  color: #ffc107;
+}
+
+.collapseBtn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary, #888);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+
+.content {
+  margin-top: 12px;
+}
+
+.loading, .noWorkers {
+  text-align: center;
+  padding: 20px;
+  color: var(--color-text-secondary, #888);
+}
+
+.noWorkers p {
+  margin: 4px 0;
+}
+
+.hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.error {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.throughput {
+  background: rgba(76, 175, 80, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.throughputLabel {
+  color: var(--color-text-secondary, #888);
+  font-size: 0.9rem;
+}
+
+.throughputValue {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.workersList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workerItem {
+  background: var(--color-background, #121212);
+  border-radius: 6px;
+  padding: 10px 12px;
+  border-left: 3px solid transparent;
+}
+
+.workerItem.active {
+  border-left-color: #4caf50;
+}
+
+.workerItem.idle {
+  border-left-color: #ffc107;
+}
+
+.workerItem.stale {
+  border-left-color: #f44336;
+}
+
+.workerItem.stopped {
+  border-left-color: #666;
+  opacity: 0.7;
+}
+
+.workerItem.starting {
+  border-left-color: #2196f3;
+}
+
+.workerHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.statusIcon {
+  font-size: 0.9rem;
+}
+
+.workerName {
+  font-weight: 500;
+  flex: 1;
+}
+
+.managedBadge {
+  background: rgba(33, 150, 243, 0.2);
+  color: #2196f3;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+}
+
+.workerDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #888);
+}
+
+.serverInfo, .phaseInfo, .rateInfo, .memoryInfo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.phaseInfo {
+  color: #4caf50;
+}
+
+.workerFooter {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #666);
+}
+
+.heartbeat {
+  opacity: 0.7;
+}
+
+/* Compact mode */
+.compact .workerItem {
+  padding: 8px 10px;
+}
+
+.compact .workerDetails {
+  font-size: 0.8rem;
+  gap: 8px;
+}
+
+.compact .workerFooter {
+  display: none;
+}

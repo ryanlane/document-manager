@@ -23,8 +23,13 @@ import {
   Globe,
   Network,
   Zap,
-  Power
+  Power,
+  Cpu,
+  Activity
 } from 'lucide-react'
+import AddProviderWizard from '../components/AddProviderWizard'
+import WorkersPanel from '../components/WorkersPanel'
+import WorkerSchedule from '../components/WorkerSchedule'
 import styles from './Settings.module.css'
 
 const API_BASE = '/api'
@@ -37,7 +42,13 @@ function Settings() {
   // Environment variable overrides
   const [envOverrides, setEnvOverrides] = useState({})
   
-  // LLM Endpoints (Workers)
+  // LLM Providers (unified - Ollama + Cloud)
+  const [providers, setProviders] = useState([])
+  const [loadingProviders, setLoadingProviders] = useState(false)
+  const [showAddWizard, setShowAddWizard] = useState(false)
+  const [testingProvider, setTestingProvider] = useState(null)
+  
+  // Legacy endpoints (for migration display)
   const [endpoints, setEndpoints] = useState([])
   const [loadingEndpoints, setLoadingEndpoints] = useState(false)
   const [showAddEndpoint, setShowAddEndpoint] = useState(false)
@@ -77,12 +88,26 @@ function Settings() {
   const loadAll = async () => {
     setLoading(true)
     await Promise.all([
-      loadEndpoints(),
+      loadProviders(),
       loadSettings(),
       loadOllamaModels(),
       loadModelCatalog()
     ])
     setLoading(false)
+  }
+
+  const loadProviders = async () => {
+    setLoadingProviders(true)
+    try {
+      const res = await fetch(`${API_BASE}/servers`)
+      if (res.ok) {
+        const data = await res.json()
+        setProviders(data.servers || [])
+      }
+    } catch (err) {
+      console.error('Failed to load providers:', err)
+    }
+    setLoadingProviders(false)
   }
 
   const loadEndpoints = async () => {
@@ -295,6 +320,43 @@ function Settings() {
     setTestingEndpoint(null)
   }
 
+  // === Provider Management (new unified system) ===
+  const toggleProvider = async (id, enabled) => {
+    try {
+      await fetch(`${API_BASE}/servers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      })
+      loadProviders()
+    } catch (err) {
+      console.error('Failed to toggle provider:', err)
+    }
+  }
+
+  const deleteProvider = async (id, name) => {
+    if (!confirm(`Delete provider "${name}"?\n\nThis will also remove any associated workers.`)) return
+    try {
+      await fetch(`${API_BASE}/servers/${id}`, { method: 'DELETE' })
+      loadProviders()
+    } catch (err) {
+      alert('Failed to delete provider: ' + err.message)
+    }
+  }
+
+  const testProvider = async (id) => {
+    setTestingProvider(id)
+    try {
+      const res = await fetch(`${API_BASE}/servers/${id}/test`, { method: 'POST' })
+      if (res.ok) {
+        loadProviders() // Reload to get updated status
+      }
+    } catch (err) {
+      console.error('Failed to test provider:', err)
+    }
+    setTestingProvider(null)
+  }
+
   // === LLM Settings ===
   const saveLLMSettings = async () => {
     setSaving(true)
@@ -442,161 +504,216 @@ function Settings() {
       </div>
 
       <div className={styles.content}>
-        {/* === LLM Workers Tab === */}
+        {/* === LLM Providers Tab (renamed from Workers) === */}
         {activeTab === 'workers' && (
           <div className={styles.section}>
+            {/* Add Provider Wizard */}
+            <AddProviderWizard 
+              isOpen={showAddWizard} 
+              onClose={() => setShowAddWizard(false)}
+              onSuccess={() => loadProviders()}
+            />
+
+            {/* Header */}
             <div className={styles.sectionHeader}>
               <div>
-                <h2>LLM Workers</h2>
+                <h2>LLM Providers</h2>
                 <p className={styles.description}>
-                  Configure Ollama endpoints across your network for distributed processing.
+                  Add Ollama servers or cloud APIs to power document processing.
                 </p>
               </div>
               <button 
                 className={styles.addBtn} 
-                onClick={() => setShowAddEndpoint(!showAddEndpoint)}
+                onClick={() => setShowAddWizard(true)}
               >
-                <Plus size={16} /> Add Endpoint
+                <Plus size={16} /> Add Provider
               </button>
             </div>
 
-            {/* Add Endpoint Form */}
-            {showAddEndpoint && (
-              <div className={styles.addForm}>
-                <div className={styles.formRow}>
-                  <input
-                    type="text"
-                    placeholder="Name (e.g., Oak Server)"
-                    value={newEndpoint.name}
-                    onChange={(e) => setNewEndpoint(p => ({ ...p, name: e.target.value }))}
-                  />
-                  <input
-                    type="text"
-                    placeholder="URL (e.g., http://192.168.1.19:11434)"
-                    value={newEndpoint.url}
-                    onChange={(e) => setNewEndpoint(p => ({ ...p, url: e.target.value }))}
-                  />
-                  <button onClick={addEndpoint} disabled={!newEndpoint.name || !newEndpoint.url}>
-                    <Check size={16} /> Add
-                  </button>
-                  <button onClick={() => setShowAddEndpoint(false)} className={styles.cancelBtn}>
-                    <X size={16} />
-                  </button>
-                </div>
-                <small>
-                  Common endpoints: <code>http://ollama:11434</code> (Docker), 
-                  <code>http://host.docker.internal:11434</code> (Host), 
-                  <code>http://192.168.x.x:11434</code> (Network)
-                </small>
+            {/* Provider Overview */}
+            <div className={styles.providerStats}>
+              <div className={styles.stat}>
+                <Cpu size={16} />
+                <span>
+                  {providers.filter(p => p.provider_type === 'ollama' && p.status === 'online').length} Ollama servers online
+                </span>
               </div>
-            )}
+              <div className={styles.stat}>
+                <Cloud size={16} />
+                <span>
+                  {providers.filter(p => p.provider_type !== 'ollama' && p.status === 'online').length} Cloud APIs configured
+                </span>
+              </div>
+            </div>
 
-            {/* Endpoints List */}
-            <div className={styles.endpointsList}>
-              {loadingEndpoints ? (
+            {/* Providers List */}
+            <div className={styles.providersList}>
+              {loadingProviders ? (
                 <div className={styles.loadingSmall}><Loader2 className={styles.spinner} size={16} /> Loading...</div>
-              ) : endpoints.length === 0 ? (
+              ) : providers.length === 0 ? (
                 <div className={styles.emptyState}>
                   <Server size={32} />
-                  <p>No LLM endpoints configured</p>
-                  <small>Add Ollama servers on your network to distribute processing</small>
+                  <p>No LLM providers configured</p>
+                  <small>Add Ollama servers or cloud APIs to start processing documents</small>
+                  <button className={styles.addBtn} onClick={() => setShowAddWizard(true)}>
+                    <Plus size={16} /> Add Your First Provider
+                  </button>
                 </div>
               ) : (
-                endpoints.map(ep => (
-                  <div key={ep.id} className={`${styles.endpoint} ${ep.enabled ? '' : styles.paused}`}>
-                    <div className={styles.endpointStatus}>
-                      {!ep.enabled ? (
-                        <Power size={18} className={styles.pausedIcon} />
-                      ) : ep.status?.connected ? (
-                        <Wifi size={18} className={styles.connected} />
-                      ) : (
-                        <WifiOff size={18} className={styles.disconnected} />
-                      )}
+                <>
+                  {/* Ollama Providers */}
+                  {providers.filter(p => p.provider_type === 'ollama').length > 0 && (
+                    <div className={styles.providerGroup}>
+                      <h4><Cpu size={16} /> Ollama Servers</h4>
+                      {providers.filter(p => p.provider_type === 'ollama').map(provider => (
+                        <div key={provider.id} className={`${styles.provider} ${provider.enabled ? '' : styles.disabled}`}>
+                          <div className={styles.providerStatus}>
+                            {!provider.enabled ? (
+                              <Power size={18} className={styles.pausedIcon} />
+                            ) : provider.status === 'online' ? (
+                              <Wifi size={18} className={styles.connected} />
+                            ) : provider.status === 'offline' ? (
+                              <WifiOff size={18} className={styles.disconnected} />
+                            ) : (
+                              <AlertCircle size={18} className={styles.unknown} />
+                            )}
+                          </div>
+                          
+                          <div className={styles.providerInfo}>
+                            <div className={styles.providerName}>
+                              {provider.name}
+                              {!provider.enabled && <span className={styles.disabledBadge}>Disabled</span>}
+                              {provider.worker_count > 0 && (
+                                <span className={styles.workerBadge}>
+                                  <Activity size={12} /> {provider.worker_count} worker{provider.worker_count > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <code className={styles.providerUrl}>{provider.url}</code>
+                            <div className={styles.providerMeta}>
+                              {provider.status === 'online' && (
+                                <span>{provider.models_available?.length || 0} models</span>
+                              )}
+                              {provider.capabilities?.chat && <span className={styles.capBadge}>Chat</span>}
+                              {provider.capabilities?.embedding && <span className={styles.capBadge}>Embed</span>}
+                              {provider.capabilities?.vision && <span className={styles.capBadge}>Vision</span>}
+                              {provider.status_message && provider.status !== 'online' && (
+                                <span className={styles.errorText}>{provider.status_message}</span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className={styles.providerActions}>
+                            <button 
+                              onClick={() => toggleProvider(provider.id, !provider.enabled)}
+                              className={provider.enabled ? styles.running : styles.pausedBtn}
+                              title={provider.enabled ? 'Disable' : 'Enable'}
+                            >
+                              <Power size={14} />
+                            </button>
+                            <button 
+                              onClick={() => testProvider(provider.id)}
+                              disabled={testingProvider === provider.id || !provider.enabled}
+                              title="Test connection"
+                            >
+                              {testingProvider === provider.id ? (
+                                <Loader2 size={16} className={styles.spinner} />
+                              ) : (
+                                <RefreshCw size={16} />
+                              )}
+                            </button>
+                            <button 
+                              onClick={() => deleteProvider(provider.id, provider.name)}
+                              className={styles.deleteBtn}
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    
-                    <div className={styles.endpointInfo}>
-                      <div className={styles.endpointName}>
-                        {ep.name}
-                        {!ep.enabled && <span className={styles.pausedBadge}>Paused</span>}
-                      </div>
-                      <code className={styles.endpointUrl}>{ep.url}</code>
-                      <div className={styles.endpointMeta}>
-                        {ep.enabled && ep.status?.connected && <span>{ep.status.models} models</span>}
-                        {ep.capabilities?.map(c => (
-                          <span key={c} className={styles.capBadge}>{c}</span>
-                        ))}
-                        {ep.enabled && ep.status?.error && <span className={styles.errorText}>{ep.status.error}</span>}
-                      </div>
+                  )}
+
+                  {/* Cloud Providers */}
+                  {providers.filter(p => p.provider_type !== 'ollama').length > 0 && (
+                    <div className={styles.providerGroup}>
+                      <h4><Cloud size={16} /> Cloud APIs</h4>
+                      {providers.filter(p => p.provider_type !== 'ollama').map(provider => (
+                        <div key={provider.id} className={`${styles.provider} ${provider.enabled ? '' : styles.disabled}`}>
+                          <div className={styles.providerStatus}>
+                            {!provider.enabled ? (
+                              <Power size={18} className={styles.pausedIcon} />
+                            ) : provider.status === 'online' ? (
+                              <Check size={18} className={styles.connected} />
+                            ) : provider.status === 'unconfigured' ? (
+                              <AlertCircle size={18} className={styles.warning} />
+                            ) : (
+                              <X size={18} className={styles.disconnected} />
+                            )}
+                          </div>
+                          
+                          <div className={styles.providerInfo}>
+                            <div className={styles.providerName}>
+                              {provider.name}
+                              <span className={styles.typeBadge}>{provider.provider_type}</span>
+                              {!provider.enabled && <span className={styles.disabledBadge}>Disabled</span>}
+                            </div>
+                            <div className={styles.providerMeta}>
+                              {provider.has_api_key ? (
+                                <span className={styles.keyConfigured}>✓ API Key configured</span>
+                              ) : (
+                                <span className={styles.keyMissing}>⚠ API Key required</span>
+                              )}
+                              {provider.default_model && <span>Model: {provider.default_model}</span>}
+                            </div>
+                          </div>
+                          
+                          <div className={styles.providerActions}>
+                            <button 
+                              onClick={() => toggleProvider(provider.id, !provider.enabled)}
+                              className={provider.enabled ? styles.running : styles.pausedBtn}
+                              title={provider.enabled ? 'Disable' : 'Enable'}
+                            >
+                              <Power size={14} />
+                            </button>
+                            <button 
+                              onClick={() => testProvider(provider.id)}
+                              disabled={testingProvider === provider.id || !provider.enabled}
+                              title="Test connection"
+                            >
+                              {testingProvider === provider.id ? (
+                                <Loader2 size={16} className={styles.spinner} />
+                              ) : (
+                                <RefreshCw size={16} />
+                              )}
+                            </button>
+                            <button 
+                              onClick={() => deleteProvider(provider.id, provider.name)}
+                              className={styles.deleteBtn}
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    
-                    <div className={styles.endpointActions}>
-                      <button 
-                        onClick={() => toggleEndpoint(ep.id, !ep.enabled)}
-                        className={`${styles.pauseBtn} ${ep.enabled ? styles.running : styles.pausedBtn}`}
-                        title={ep.enabled ? 'Pause this worker' : 'Resume this worker'}
-                      >
-                        {ep.enabled ? (
-                          <><Power size={14} /> Pause</>
-                        ) : (
-                          <><Power size={14} /> Resume</>
-                        )}
-                      </button>
-                      <button 
-                        onClick={() => testEndpoint(ep.id)}
-                        disabled={testingEndpoint === ep.id || !ep.enabled}
-                        title="Test connection"
-                      >
-                        {testingEndpoint === ep.id ? (
-                          <Loader2 size={16} className={styles.spinner} />
-                        ) : (
-                          <RefreshCw size={16} />
-                        )}
-                      </button>
-                      <button 
-                        onClick={() => deleteEndpoint(ep.id, ep.name)}
-                        className={styles.deleteBtn}
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  )}
+                </>
               )}
             </div>
 
-            {/* Quick Add Presets */}
-            <div className={styles.presets}>
-              <h4>Quick Add</h4>
-              <div className={styles.presetBtns}>
-                <button onClick={() => {
-                  setNewEndpoint({ name: 'Docker Ollama', url: 'http://ollama:11434', type: 'ollama' })
-                  setShowAddEndpoint(true)
-                }}>
-                  <Container size={14} /> Docker
-                </button>
-                <button onClick={() => {
-                  setNewEndpoint({ name: 'Host Ollama', url: 'http://host.docker.internal:11434', type: 'ollama' })
-                  setShowAddEndpoint(true)
-                }}>
-                  <Monitor size={14} /> Host (Win/Mac)
-                </button>
-                <button onClick={() => {
-                  setNewEndpoint({ name: 'Host Ollama', url: 'http://172.17.0.1:11434', type: 'ollama' })
-                  setShowAddEndpoint(true)
-                }}>
-                  <Monitor size={14} /> Host (Linux)
-                </button>
-                <button onClick={() => {
-                  const ip = prompt('Enter network IP:', '192.168.1.')
-                  if (ip) {
-                    setNewEndpoint({ name: `Network (${ip})`, url: `http://${ip}:11434`, type: 'ollama' })
-                    setShowAddEndpoint(true)
-                  }
-                }}>
-                  <Globe size={14} /> Network...
-                </button>
+            {/* Active Workers Section */}
+            {providers.filter(p => p.provider_type === 'ollama' && p.status === 'online').length > 0 && (
+              <div className={styles.workersSection}>
+                <WorkersPanel compact={false} refreshInterval={15000} />
               </div>
+            )}
+
+            {/* Worker Schedule Section */}
+            <div className={styles.scheduleSection}>
+              <WorkerSchedule />
             </div>
           </div>
         )}

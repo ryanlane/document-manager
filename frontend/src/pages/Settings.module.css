@@ -1973,6 +1973,222 @@
   border-color: var(--accent-color);
 }
 
+/* Servers Section */
+.serversSection {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Workers Section in Settings */
+.workersSection {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Schedule Section in Settings */
+.scheduleSection {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Provider Stats */
+.providerStats {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: 8px;
+}
+
+.providerStats .stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.providerStats .stat svg {
+  color: var(--accent-color);
+}
+
+/* Providers List */
+.providersList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.providerGroup {
+  margin-bottom: 1.5rem;
+}
+
+.providerGroup h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.provider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  transition: all 0.15s;
+}
+
+.provider:hover {
+  border-color: var(--border-hover);
+}
+
+.provider.disabled {
+  opacity: 0.6;
+  background: var(--bg-secondary);
+}
+
+.providerStatus {
+  flex-shrink: 0;
+}
+
+.providerStatus .connected {
+  color: var(--success-color, #10b981);
+}
+
+.providerStatus .disconnected {
+  color: var(--error-color, #ef4444);
+}
+
+.providerStatus .warning {
+  color: var(--warning-color, #f59e0b);
+}
+
+.providerStatus .unknown {
+  color: var(--text-tertiary);
+}
+
+.providerStatus .pausedIcon {
+  color: var(--text-tertiary);
+}
+
+.providerInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.providerName {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.providerUrl {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.providerMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.typeBadge {
+  background: var(--accent-color);
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.disabledBadge {
+  background: var(--text-tertiary);
+  color: var(--bg-primary);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+.workerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success-color, #10b981);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.keyConfigured {
+  color: var(--success-color, #10b981);
+}
+
+.keyMissing {
+  color: var(--warning-color, #f59e0b);
+}
+
+.providerActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.providerActions button {
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.providerActions button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.providerActions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.providerActions .running {
+  color: var(--success-color, #10b981);
+}
+
+.providerActions .pausedBtn {
+  color: var(--text-tertiary);
+}
+
+.providerActions .deleteBtn:hover {
+  color: var(--error-color, #ef4444);
+  border-color: var(--error-color, #ef4444);
+}
+
 /* Model Grid */
 .modelGrid {
   display: grid;

@@ -207,3 +207,81 @@ class Job(Base):
         Index('jobs_status_idx', 'status'),
         Index('jobs_created_at_idx', 'created_at'),
     )
+
+
+class OllamaServer(Base):
+    """
+    Registry of LLM providers for distributed processing.
+    Supports Ollama servers and cloud providers (OpenAI, Anthropic, etc.).
+    Originally named 'ollama_servers' but now serves as unified LLM providers table.
+    """
+    __tablename__ = 'ollama_servers'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False, unique=True)
+    url = Column(Text, nullable=False)
+    enabled = Column(Boolean, default=True)
+    status = Column(Text, default='unknown')  # 'online', 'offline', 'error', 'unknown', 'unconfigured'
+    status_message = Column(Text)  # Error message or status details
+    last_health_check = Column(DateTime(timezone=True))
+    gpu_info = Column(JSONB)  # Detected GPU info: {name, vram_total, vram_free}
+    models_available = Column(JSONB)  # Cached list of installed models
+    capabilities = Column(JSONB)  # {chat: bool, embedding: bool, vision: bool}
+    priority = Column(Integer, default=0)  # Higher = preferred for task assignment
+    
+    # Cloud provider support (migration 009)
+    provider_type = Column(Text, default='ollama')  # 'ollama', 'openai', 'anthropic', 'google'
+    api_key = Column(Text)  # API key for cloud providers (encrypted at app layer recommended)
+    base_url = Column(Text)  # Override URL (e.g., Azure OpenAI endpoints)
+    default_model = Column(Text)  # Default model for this provider
+    rate_limits = Column(JSONB)  # {requests_per_minute, tokens_per_minute, current_usage}
+    usage_stats = Column(JSONB)  # {total_tokens, total_cost_usd, last_reset}
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationship to workers
+    workers = relationship("Worker", back_populates="ollama_server", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('ollama_servers_status_idx', 'status'),
+        Index('ollama_servers_enabled_idx', 'enabled'),
+        Index('ollama_servers_provider_type_idx', 'provider_type'),
+    )
+
+
+class Worker(Base):
+    """
+    Registry of active workers for distributed processing.
+    Workers self-register and send periodic heartbeats.
+    """
+    __tablename__ = 'workers'
+
+    id = Column(Text, primary_key=True)  # UUID or hostname-based ID
+    name = Column(Text, nullable=False)
+    ollama_server_id = Column(Integer, ForeignKey('ollama_servers.id', ondelete='SET NULL'))
+    status = Column(Text, default='starting')  # 'starting', 'active', 'idle', 'stale', 'stopped'
+    current_task = Column(Text)  # e.g., 'enriching doc #12345' or null
+    current_phase = Column(Text)  # 'ingest', 'segment', 'enrich', 'embed', etc.
+    stats = Column(JSONB)  # {docs_per_min, entries_per_min, uptime_seconds, memory_mb}
+    managed = Column(Boolean, default=False)  # True if spawned by API, False if external
+    
+    last_heartbeat = Column(DateTime(timezone=True))
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Worker configuration (what phases it handles)
+    config = Column(JSONB)  # {phases: ['ingest', 'segment', 'enrich', 'embed'], batch_size: 100}
+    
+    # Scheduling support (migration 009)
+    schedule_type = Column(Text, default='always_on')  # 'always_on', 'use_default', 'custom', 'always_off'
+    schedule = Column(JSONB)  # {start_time, end_time, next_day, days, timezone}
+    schedule_status = Column(Text)  # 'in_window', 'outside_window', 'paused_by_schedule'
+    
+    # Relationship to server
+    ollama_server = relationship("OllamaServer", back_populates="workers")
+
+    __table_args__ = (
+        Index('workers_status_idx', 'status'),
+        Index('workers_last_heartbeat_idx', 'last_heartbeat'),
+        Index('workers_ollama_server_id_idx', 'ollama_server_id'),
+    )

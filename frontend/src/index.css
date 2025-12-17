@@ -11,6 +11,9 @@
   --color-border: #333;
   --color-border-light: #444;
   --color-surface: #242424;
+  --bg-secondary: rgba(255, 255, 255, 0.05);
+
+  --border-color: #333;
   
   --color-text: rgba(255, 255, 255, 0.87);
   --color-text-muted: #888;
