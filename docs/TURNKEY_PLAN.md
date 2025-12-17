@@ -907,6 +907,120 @@ Automatically scale workers based on queue depth.
 
 **This is Phase 2 of scaling - manual control first.**
 
+### 7.7 Worker Scheduling
+Allow users to configure active hours for workers - essential for shared machines used for other tasks during the day.
+
+**UI: Settings > Worker Schedules**
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Worker Schedules                                            │
+│  ─────────────────────────────────────────────────────────── │
+│  ☑ Enable scheduling (workers pause outside active hours)   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  Default Schedule (applies to all unless overridden)    │ │
+│  │  ───────────────────────────────────────────────────────│ │
+│  │  Active hours: [22:00] to [08:00]  ☑ Next day           │ │
+│  │  Active days:  ☑M ☑T ☑W ☑T ☑F ☑S ☑S                     │ │
+│  │  Timezone:     [America/Denver ▼]                       │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│                                                              │
+│  Per-Worker Overrides:                                       │
+│  ─────────────────────────────────────────────────────────── │
+│  Worker          Schedule              Status                │
+│  ─────────────────────────────────────────────────────────── │
+│  asgard-main     ○ Use default         ● Active (in window) │
+│  oak-worker      ● Custom: 00:00-06:00 ○ Paused (outside)   │
+│  rented-gpu      ○ Always on           ● Active             │
+│                                                              │
+│  [Save Schedules]                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Schedule Options per Worker:**
+| Option | Behavior |
+|--------|----------|
+| **Use default** | Follows the global schedule above |
+| **Custom** | Worker-specific active hours |
+| **Always on** | Ignores scheduling, runs 24/7 |
+| **Always off** | Manually paused until changed |
+
+**Database Schema:**
+```sql
+-- Global schedule settings (in settings table)
+-- schedule_enabled: boolean
+-- schedule_default: jsonb
+
+-- Per-worker schedule (in workers table or new table)
+CREATE TABLE worker_schedules (
+    worker_id VARCHAR(255) PRIMARY KEY REFERENCES workers(id),
+    schedule_type VARCHAR(50) DEFAULT 'default',  -- default, custom, always_on, always_off
+    active_start TIME,           -- e.g., '22:00'
+    active_end TIME,             -- e.g., '08:00'
+    crosses_midnight BOOLEAN,    -- true if end < start
+    active_days INTEGER[],       -- [0,1,2,3,4,5,6] = Sun-Sat
+    timezone VARCHAR(100),       -- e.g., 'America/Denver'
+    updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+**Worker Behavior:**
+1. Worker checks schedule on startup and every 60 seconds
+2. If outside active window → pause processing (don't exit)
+3. If inside active window → resume processing
+4. Dashboard shows schedule status: "Active", "Paused (resumes at 22:00)", etc.
+5. Manual pause/resume still works and overrides schedule temporarily
+
+**API Endpoints:**
+- `GET /api/schedules` - Get global and per-worker schedules
+- `PUT /api/schedules/default` - Update global schedule
+- `PUT /api/schedules/worker/{id}` - Update worker-specific schedule
+- `GET /api/schedules/status` - Current schedule state for all workers
+
+**Schedule Evaluation Logic:**
+```python
+def is_within_schedule(schedule: WorkerSchedule) -> bool:
+    if schedule.schedule_type == 'always_on':
+        return True
+    if schedule.schedule_type == 'always_off':
+        return False
+    
+    now = datetime.now(pytz.timezone(schedule.timezone))
+    current_time = now.time()
+    current_day = now.weekday()  # 0=Monday
+    
+    # Check if today is an active day
+    if current_day not in schedule.active_days:
+        return False
+    
+    # Handle midnight crossing (e.g., 22:00 - 08:00)
+    if schedule.crosses_midnight:
+        return current_time >= schedule.active_start or current_time < schedule.active_end
+    else:
+        return schedule.active_start <= current_time < schedule.active_end
+```
+
+**Dashboard Integration:**
+- Show schedule indicator next to each worker
+- "⏰ Paused until 22:00" or "● Active (until 08:00)"
+- Warning if all workers are scheduled off and queue is large
+
+**Common Presets:**
+| Preset | Hours | Use Case |
+|--------|-------|----------|
+| Overnight | 22:00 - 08:00 | Desktop used during day |
+| Weekends only | Sat-Sun all day | Work machine |
+| Off-peak | 00:00 - 06:00 | Minimal impact |
+| Business hours inverse | 18:00 - 09:00 | Office machine |
+
+**Files:**
+- `backend/src/db/models.py` (add WorkerSchedule model)
+- `backend/src/db/settings.py` (add schedule settings)
+- `backend/src/worker_loop.py` (add schedule checking)
+- `backend/src/api/main.py` (schedule endpoints)
+- `frontend/src/pages/Settings.jsx` (schedule UI)
+- `frontend/src/pages/Dashboard.jsx` (schedule status display)
+
 ---
 
 ## Implementation Priority Order
@@ -930,10 +1044,12 @@ Automatically scale workers based on queue depth.
 8. ⬜ Worker Registration & Heartbeats (7.2)
 9. ⬜ Worker Visibility on Dashboard (7.2)
 10. ⬜ Standalone Worker Image (7.5)
+11. ⬜ **Worker Scheduling (7.7)** ← Essential for shared machines
 
 **Why Sprint 2 is workers:**
 - Core differentiator: "add GPUs from the UI"
 - Enables horizontal scaling without CLI
+- Scheduling lets users share machines without manual pause/resume
 - Foundation for Scale-out edition
 
 ### Sprint 3: Enhanced Configuration
