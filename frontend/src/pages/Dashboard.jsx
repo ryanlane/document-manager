@@ -43,15 +43,19 @@ const StatCard = ({ icon: Icon, color, title, value, sub, loading }) => (
 )
 
 // Progress bar component with optional ETA
-const ProgressBar = ({ percent, color, label, sublabel, loading, active, eta }) => (
+const ProgressBar = ({ percent, color, label, sublabel, loading, active, eta, paused }) => (
   <div className={styles.progressItem}>
     <div className={styles.progressLabel}>
       <span className={styles.progressTitle}>
-        {active && <Loader2 size={14} className={styles.spin} />}
+        {active && !paused && <Loader2 size={14} className={styles.spin} />}
         {label}
       </span>
       <div className={styles.progressRight}>
-        {eta && eta.eta_string && eta.eta_string !== 'Complete' && (
+        {paused ? (
+          <span className={styles.etaTag} title="Processing paused">
+            <Clock size={10} /> ∞
+          </span>
+        ) : eta && eta.eta_string && eta.eta_string !== 'Complete' && (
           <span className={styles.etaTag} title={`Rate: ${eta.rate_per_min || 0}/min`}>
             <Clock size={10} /> {eta.eta_string}
           </span>
@@ -491,6 +495,7 @@ function Dashboard() {
               sublabel={docCounts ? `${docCounts.enriched?.toLocaleString()} / ${docCounts.total?.toLocaleString()}` : null}
               loading={!docCounts}
               active={workerState?.enrich_docs}
+              paused={!workerState?.running || !workerState?.enrich_docs}
               eta={workerStats?.docs?.eta}
             />
             <ProgressBar 
@@ -500,6 +505,7 @@ function Dashboard() {
               sublabel={docCounts ? `${docCounts.embedded?.toLocaleString()} / ${docCounts.total?.toLocaleString()}` : null}
               loading={!docCounts}
               active={workerState?.embed_docs}
+              paused={!workerState?.running || !workerState?.embed_docs}
             />
           </div>
           {docCounts?.error > 0 && (
@@ -537,7 +543,12 @@ function Dashboard() {
                 <Box size={12} />
                 <span>{systemStatus.ollama.embedding_model}</span>
               </div>
-              {workerStats?.eta?.eta_string && workerStats.eta.eta_string !== 'Calculating...' && (
+              {(!workerState?.running || !workerState?.enrich) ? (
+                <div className={styles.etaBadge} title="Processing paused">
+                  <Clock size={12} />
+                  <span>ETA: ∞</span>
+                </div>
+              ) : workerStats?.eta?.eta_string && workerStats.eta.eta_string !== 'Calculating...' && (
                 <div className={styles.etaBadge} title="Estimated time remaining">
                   <Clock size={12} />
                   <span>ETA: {workerStats.eta.eta_string}</span>
@@ -577,6 +588,7 @@ function Dashboard() {
               sublabel={counts ? `${counts.entries.enriched?.toLocaleString()} / ${counts.entries.total?.toLocaleString()}` : null}
               loading={!counts}
               active={workerState?.enrich}
+              paused={!workerState?.running || !workerState?.enrich}
               eta={workerStats?.eta}
             />
             <ProgressBar 
@@ -586,6 +598,7 @@ function Dashboard() {
               sublabel={counts ? `${counts.entries.embedded?.toLocaleString()} / ${counts.entries.total?.toLocaleString()}` : null}
               loading={!counts}
               active={workerState?.embed}
+              paused={!workerState?.running || !workerState?.embed}
             />
           </div>
           
