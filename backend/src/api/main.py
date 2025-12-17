@@ -34,6 +34,7 @@ os.makedirs(SHARED_DIR, exist_ok=True)
 THUMBNAIL_DIR = os.path.join(SHARED_DIR, "thumbnails")
 WORKER_STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 WORKER_LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
+WORKER_PROGRESS_FILE = os.path.join(SHARED_DIR, "worker_progress.json")
 INGEST_PROGRESS_FILE = os.path.join(SHARED_DIR, "ingest_progress.json")
 ENRICH_PROGRESS_FILE = os.path.join(SHARED_DIR, "enrich_progress.json")
 EMBED_PROGRESS_FILE = os.path.join(SHARED_DIR, "embed_progress.json")
@@ -138,6 +139,45 @@ def update_worker_state(update: WorkerStateUpdate):
         return current
     else:
         raise HTTPException(status_code=500, detail="Failed to save worker state")
+
+@app.get("/worker/progress")
+def get_worker_progress():
+    """Get current batch progress for all worker phases."""
+    result = {}
+    
+    # Read from the new unified progress file (set by worker_loop.py)
+    try:
+        if os.path.exists(WORKER_PROGRESS_FILE):
+            with open(WORKER_PROGRESS_FILE, 'r') as f:
+                result = json.load(f)
+    except Exception:
+        pass
+    
+    # Also read from legacy progress files if they exist
+    def read_legacy_progress(filepath):
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return None
+    
+    # Merge legacy progress files (for backwards compatibility)
+    if 'ingest' not in result:
+        legacy = read_legacy_progress(INGEST_PROGRESS_FILE)
+        if legacy:
+            result['ingest'] = legacy
+    if 'enrich' not in result:
+        legacy = read_legacy_progress(ENRICH_PROGRESS_FILE)
+        if legacy:
+            result['enrich'] = legacy
+    if 'embed' not in result:
+        legacy = read_legacy_progress(EMBED_PROGRESS_FILE)
+        if legacy:
+            result['embed'] = legacy
+    
+    return result
 
 @app.get("/worker/logs")
 def get_worker_logs(lines: int = 100):
@@ -248,30 +288,6 @@ def clear_worker_logs():
         return {"message": "No log file to clear"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/worker/progress")
-def get_worker_progress():
-    """Get progress for all pipeline phases."""
-    def read_progress(filepath, default_phase):
-        try:
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    return json.load(f)
-        except Exception:
-            pass
-        return {
-            "phase": default_phase,
-            "current": 0,
-            "total": 0,
-            "percent": 0,
-            "updated_at": None
-        }
-    
-    return {
-        "ingest": read_progress(INGEST_PROGRESS_FILE, "idle"),
-        "enrich": read_progress(ENRICH_PROGRESS_FILE, "idle"),
-        "embed": read_progress(EMBED_PROGRESS_FILE, "idle")
-    }
 
 @app.get("/worker/stats")
 def get_worker_stats(db: Session = Depends(get_db)):

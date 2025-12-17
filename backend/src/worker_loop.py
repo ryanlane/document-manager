@@ -13,6 +13,7 @@ else:
 
 STATE_FILE = os.path.join(SHARED_DIR, "worker_state.json")
 LOG_FILE = os.path.join(SHARED_DIR, "worker.log")
+PROGRESS_FILE = os.path.join(SHARED_DIR, "worker_progress.json")
 
 # Ensure shared directory exists
 os.makedirs(SHARED_DIR, exist_ok=True)
@@ -79,6 +80,32 @@ def save_state(state):
     except Exception as e:
         logger.error(f"Failed to save state: {e}")
 
+def update_progress(phase: str, current: int = None, total: int = None, status: str = "running"):
+    """Update progress for a phase. Called between batch iterations."""
+    try:
+        progress = {}
+        if os.path.exists(PROGRESS_FILE):
+            with open(PROGRESS_FILE, 'r') as f:
+                progress = json.load(f)
+        
+        progress[phase] = {
+            "current": current,
+            "total": total,
+            "status": status,  # running, stopping, stopped, idle
+            "updated_at": time.time()
+        }
+        
+        with open(PROGRESS_FILE, 'w') as f:
+            json.dump(progress, f)
+    except Exception as e:
+        logger.warning(f"Failed to update progress: {e}")
+
+def check_phase_enabled(state: dict, phase: str) -> bool:
+    """Check if a phase is still enabled. Used between iterations for responsive stopping."""
+    # Re-read state to catch changes made via API
+    current_state = get_state()
+    return current_state.get(phase, True)
+
 def run_pipeline():
     logger.info("Worker loop started.")
     # Initialize state file
@@ -138,26 +165,58 @@ def run_pipeline():
             # 3. Doc-level Enrichment (run before chunk enrichment)
             if state.get("enrich_docs", True):
                 logger.info("--- Starting Doc Enrichment Phase ---")
-                for _ in range(5):  # 5 iterations x 20 batch = 100 docs/cycle
+                total_iterations = 5
+                for i in range(total_iterations):  # 5 iterations x 20 batch = 100 docs/cycle
+                    update_progress("enrich_docs", current=i+1, total=total_iterations, status="running")
                     enrich_docs_main()
+                    if not check_phase_enabled(state, "enrich_docs"):
+                        update_progress("enrich_docs", current=i+1, total=total_iterations, status="stopped")
+                        logger.info("enrich_docs disabled mid-cycle, stopping early")
+                        break
+                else:
+                    update_progress("enrich_docs", status="idle")
             
             # 4. Chunk Enrichment
             if state.get("enrich", True):
                 logger.info("--- Starting Chunk Enrichment Phase ---")
-                for _ in range(50):  # 50 iterations x 100 batch = 5000 entries/cycle
+                total_iterations = 50
+                for i in range(total_iterations):  # 50 iterations x 100 batch = 5000 entries/cycle
+                    update_progress("enrich", current=i+1, total=total_iterations, status="running")
                     enrich_main()
+                    if not check_phase_enabled(state, "enrich"):
+                        update_progress("enrich", current=i+1, total=total_iterations, status="stopped")
+                        logger.info("enrich disabled mid-cycle, stopping early")
+                        break
+                else:
+                    update_progress("enrich", status="idle")
             
             # 5. Doc-level Embedding (fast, run before chunk embedding)
             if state.get("embed_docs", True):
                 logger.info("--- Starting Doc Embedding Phase ---")
-                for _ in range(10):  # 10 iterations x 50 batch = 500 docs/cycle
+                total_iterations = 10
+                for i in range(total_iterations):  # 10 iterations x 50 batch = 500 docs/cycle
+                    update_progress("embed_docs", current=i+1, total=total_iterations, status="running")
                     embed_docs_main()
+                    if not check_phase_enabled(state, "embed_docs"):
+                        update_progress("embed_docs", current=i+1, total=total_iterations, status="stopped")
+                        logger.info("embed_docs disabled mid-cycle, stopping early")
+                        break
+                else:
+                    update_progress("embed_docs", status="idle")
                 
             # 6. Chunk Embedding
             if state.get("embed", True):
                 logger.info("--- Starting Chunk Embedding Phase ---")
-                for _ in range(10):  # More embedding iterations
+                total_iterations = 10
+                for i in range(total_iterations):  # More embedding iterations
+                    update_progress("embed", current=i+1, total=total_iterations, status="running")
                     embed_main()
+                    if not check_phase_enabled(state, "embed"):
+                        update_progress("embed", current=i+1, total=total_iterations, status="stopped")
+                        logger.info("embed disabled mid-cycle, stopping early")
+                        break
+                else:
+                    update_progress("embed", status="idle")
                 
             logger.info("Cycle complete. Sleeping for 5 seconds...")
             time.sleep(5)

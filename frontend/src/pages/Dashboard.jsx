@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { 
   Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, 
   Play, Pause, Power, RefreshCw, FilePlus, Binary, Sparkles, Search,
-  ArrowRight, FileCheck, Loader2, Zap, Box, Download, ArrowDown
+  ArrowRight, FileCheck, Loader2, Zap, Box, Download, ArrowDown, CheckCircle, X
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './Dashboard.module.css'
@@ -78,6 +78,7 @@ function Dashboard() {
   const [counts, setCounts] = useState(null)
   const [docCounts, setDocCounts] = useState(null)
   const [workerState, setWorkerState] = useState(null)
+  const [workerProgress, setWorkerProgress] = useState({})
   const [pendingToggles, setPendingToggle] = usePendingToggles()
   const [systemStatus, setSystemStatus] = useState(null)
   const [workerStats, setWorkerStats] = useState(null)
@@ -92,7 +93,20 @@ function Dashboard() {
   const [inheritanceRunning, setInheritanceRunning] = useState(false)
   const [inheritanceProgress, setInheritanceProgress] = useState({ total: 0, batches: 0 })
   
+  // Toast notifications
+  const [toasts, setToasts] = useState([])
+  const prevWorkerProgress = React.useRef({})
+  
   const [lastUpdate, setLastUpdate] = useState(null)
+  
+  // Add toast notification
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4000)
+  }, [])
 
   // Fast initial loads
   const fetchCounts = useCallback(async () => {
@@ -119,6 +133,31 @@ function Dashboard() {
       setWorkerState(data)
     } catch (err) { console.error('worker state:', err) }
   }, [])
+
+  const fetchWorkerProgress = useCallback(async () => {
+    try {
+      const res = await fetch('/api/worker/progress')
+      const data = await res.json()
+      
+      // Check for status transitions to show toasts
+      const phaseNames = {
+        enrich_docs: 'Doc Enrichment',
+        embed_docs: 'Doc Embedding',
+        enrich: 'Chunk Enrichment',
+        embed: 'Chunk Embedding'
+      }
+      
+      Object.entries(data).forEach(([phase, progress]) => {
+        const prev = prevWorkerProgress.current[phase]
+        if (prev?.status === 'running' && progress.status === 'stopped') {
+          addToast(`${phaseNames[phase] || phase} stopped`, 'success')
+        }
+      })
+      
+      prevWorkerProgress.current = data
+      setWorkerProgress(data)
+    } catch (err) { console.error('worker progress:', err) }
+  }, [addToast])
 
   const fetchSystemStatus = useCallback(async () => {
     try {
@@ -237,6 +276,7 @@ function Dashboard() {
     fetchCounts()
     fetchDocCounts()
     fetchWorkerState()
+    fetchWorkerProgress()
     fetchSystemStatus()
     fetchWorkerStats()
     
@@ -252,6 +292,7 @@ function Dashboard() {
     const countsInterval = setInterval(fetchCounts, 3000)
     const docCountsInterval = setInterval(fetchDocCounts, 3000)
     const stateInterval = setInterval(fetchWorkerState, 5000)
+    const progressInterval = setInterval(fetchWorkerProgress, 2000) // More frequent for responsive UI
     const statsInterval = setInterval(fetchWorkerStats, 5000)
     const storageInterval = setInterval(fetchStorage, 30000)
     const inheritanceInterval = setInterval(fetchInheritanceStats, 10000)
@@ -261,11 +302,12 @@ function Dashboard() {
       clearInterval(countsInterval)
       clearInterval(docCountsInterval)
       clearInterval(stateInterval)
+      clearInterval(progressInterval)
       clearInterval(statsInterval)
       clearInterval(storageInterval)
       clearInterval(inheritanceInterval)
     }
-  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchSystemStatus, fetchWorkerStats, fetchStorage, fetchExtensions, fetchRecent, fetchInheritanceStats])
+  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchWorkerProgress, fetchSystemStatus, fetchWorkerStats, fetchStorage, fetchExtensions, fetchRecent, fetchInheritanceStats])
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 B'
@@ -281,8 +323,41 @@ function Dashboard() {
   const chunkEnrichPct = counts ? (counts.entries.enriched / (counts.entries.total || 1)) * 100 : 0
   const chunkEmbedPct = counts ? (counts.entries.embedded / (counts.entries.total || 1)) * 100 : 0
 
+  // Helper to get progress info for a phase
+  const getProgressInfo = (phase) => {
+    const progress = workerProgress[phase]
+    if (!progress) return null
+    if (progress.status === 'running' && progress.current && progress.total) {
+      return `${progress.current}/${progress.total}`
+    }
+    if (progress.status === 'stopped') {
+      return 'stopping...'
+    }
+    return null
+  }
+
+  // Check if phase is currently stopping (disabled but still running)
+  const isPhaseWinding = (phase) => {
+    const progress = workerProgress[phase]
+    return !workerState?.[phase] && progress?.status === 'running'
+  }
+
   return (
     <div className={styles.page}>
+      {/* Toast Notifications */}
+      <div className={styles.toastContainer}>
+        {toasts.map(toast => (
+          <div key={toast.id} className={`${styles.toast} ${styles[toast.type]}`}>
+            {toast.type === 'success' && <CheckCircle size={16} />}
+            {toast.type === 'error' && <AlertCircle size={16} />}
+            <span>{toast.message}</span>
+            <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}>
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      
       {/* Header */}
       <div className={styles.header}>
         <h1>Dashboard</h1>
@@ -314,36 +389,44 @@ function Dashboard() {
             {pendingToggles.ingest ? <Loader2 size={14} className={styles.spin} /> : <FilePlus size={14} />} Ingest
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.enrich_docs ? styles.on : ''} ${pendingToggles.enrich_docs ? styles.pending : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.enrich_docs ? styles.on : ''} ${pendingToggles.enrich_docs ? styles.pending : ''} ${isPhaseWinding('enrich_docs') ? styles.winding : ''}`}
             onClick={() => toggleProcess('enrich_docs')}
             disabled={!workerState?.running || pendingToggles.enrich_docs}
-            title="Enrich documents"
+            title={getProgressInfo('enrich_docs') ? `Enrich documents (${getProgressInfo('enrich_docs')})` : "Enrich documents"}
           >
-            {pendingToggles.enrich_docs ? <Loader2 size={14} className={styles.spin} /> : <Sparkles size={14} />} Docs
+            {pendingToggles.enrich_docs || isPhaseWinding('enrich_docs') ? <Loader2 size={14} className={styles.spin} /> : <Sparkles size={14} />} 
+            Docs
+            {getProgressInfo('enrich_docs') && <span className={styles.progressBadge}>{getProgressInfo('enrich_docs')}</span>}
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.embed_docs ? styles.on : ''} ${pendingToggles.embed_docs ? styles.pending : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.embed_docs ? styles.on : ''} ${pendingToggles.embed_docs ? styles.pending : ''} ${isPhaseWinding('embed_docs') ? styles.winding : ''}`}
             onClick={() => toggleProcess('embed_docs')}
             disabled={!workerState?.running || pendingToggles.embed_docs}
-            title="Embed documents"
+            title={getProgressInfo('embed_docs') ? `Embed documents (${getProgressInfo('embed_docs')})` : "Embed documents"}
           >
-            {pendingToggles.embed_docs ? <Loader2 size={14} className={styles.spin} /> : <Binary size={14} />} Doc Embed
+            {pendingToggles.embed_docs || isPhaseWinding('embed_docs') ? <Loader2 size={14} className={styles.spin} /> : <Binary size={14} />} 
+            Doc Embed
+            {getProgressInfo('embed_docs') && <span className={styles.progressBadge}>{getProgressInfo('embed_docs')}</span>}
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.enrich ? styles.on : ''} ${pendingToggles.enrich ? styles.pending : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.enrich ? styles.on : ''} ${pendingToggles.enrich ? styles.pending : ''} ${isPhaseWinding('enrich') ? styles.winding : ''}`}
             onClick={() => toggleProcess('enrich')}
             disabled={!workerState?.running || pendingToggles.enrich}
-            title="Enrich chunks"
+            title={getProgressInfo('enrich') ? `Enrich chunks (${getProgressInfo('enrich')})` : "Enrich chunks"}
           >
-            {pendingToggles.enrich ? <Loader2 size={14} className={styles.spin} /> : <Layers size={14} />} Chunks
+            {pendingToggles.enrich || isPhaseWinding('enrich') ? <Loader2 size={14} className={styles.spin} /> : <Layers size={14} />} 
+            Chunks
+            {getProgressInfo('enrich') && <span className={styles.progressBadge}>{getProgressInfo('enrich')}</span>}
           </button>
           <button 
-            className={`${styles.toggleBtn} ${workerState?.embed ? styles.on : ''} ${pendingToggles.embed ? styles.pending : ''}`}
+            className={`${styles.toggleBtn} ${workerState?.embed ? styles.on : ''} ${pendingToggles.embed ? styles.pending : ''} ${isPhaseWinding('embed') ? styles.winding : ''}`}
             onClick={() => toggleProcess('embed')}
             disabled={!workerState?.running || pendingToggles.embed}
-            title="Embed chunks"
+            title={getProgressInfo('embed') ? `Embed chunks (${getProgressInfo('embed')})` : "Embed chunks"}
           >
-            {pendingToggles.embed ? <Loader2 size={14} className={styles.spin} /> : <Cpu size={14} />} Chunk Embed
+            {pendingToggles.embed || isPhaseWinding('embed') ? <Loader2 size={14} className={styles.spin} /> : <Cpu size={14} />} 
+            Chunk Embed
+            {getProgressInfo('embed') && <span className={styles.progressBadge}>{getProgressInfo('embed')}</span>}
           </button>
         </div>
       </div>
