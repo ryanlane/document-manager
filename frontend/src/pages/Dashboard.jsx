@@ -5,6 +5,7 @@ import {
   ArrowRight, FileCheck, Loader2, Zap, Box, Download, ArrowDown, CheckCircle, X
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import JobsPanel from '../components/JobsPanel'
 import styles from './Dashboard.module.css'
 
 // Track which toggles are pending
@@ -685,6 +686,9 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Background Jobs Panel */}
+      <JobsPanel showRecent={true} maxRecent={5} compact={true} />
 
       {/* Recent Files - Lazy loaded */}
       {recentFiles && recentFiles.length > 0 && (

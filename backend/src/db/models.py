@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, Text, BigInteger, DateTime, ForeignKey, Index, func, Float
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TSVECTOR
+from sqlalchemy import Column, Integer, String, Text, BigInteger, DateTime, ForeignKey, Index, func, Float, Boolean
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY, TSVECTOR, UUID
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import text
 from pgvector.sqlalchemy import Vector
 import re
+import uuid
 
 Base = declarative_base()
 
@@ -177,4 +178,32 @@ class Entry(Base):
         Index('entries_author_key_idx', 'author_key'),
         Index('entries_source_idx', 'source'),
         Index('entries_author_bucket_idx', 'author_bucket'),
+    )
+
+
+class Job(Base):
+    """
+    Generic jobs table for tracking all background operations.
+    Used for model pulls, folder scans, config imports, vacuums, etc.
+    """
+    __tablename__ = 'jobs'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type = Column(Text, nullable=False)  # 'model_pull', 'folder_scan', 'config_import', 'vacuum', etc.
+    status = Column(Text, default='pending')  # 'pending', 'running', 'completed', 'failed', 'cancelled'
+    progress = Column(Integer)  # 0-100 or NULL
+    message = Column(Text)  # Current status message
+    error = Column(Text)  # Error message if failed
+    job_metadata = Column('metadata', JSONB)  # Type-specific data (model name, folder path, etc.)
+    
+    # Timing
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('jobs_type_idx', 'type'),
+        Index('jobs_status_idx', 'status'),
+        Index('jobs_created_at_idx', 'created_at'),
     )

@@ -9,12 +9,13 @@ import json
 import yaml
 
 from src.db.session import get_db
-from src.db.models import RawFile, Entry, DocumentLink
+from src.db.models import RawFile, Entry, DocumentLink, Job
 from src.db.settings import (
     get_setting, set_setting, get_all_settings, get_llm_config,
     get_source_folders, add_source_folder, remove_source_folder,
     add_exclude_pattern, remove_exclude_pattern, Setting, DEFAULT_SETTINGS
 )
+from src.services import jobs as jobs_service
 from src.rag.search import search_entries_semantic, search_two_stage, SEARCH_MODE_VECTOR, SEARCH_MODE_KEYWORD, SEARCH_MODE_HYBRID, SEARCH_MODE_TWO_STAGE
 from src.llm_client import generate_text, list_models, list_vision_models, describe_image, OLLAMA_URL, MODEL, EMBEDDING_MODEL, VISION_MODEL
 import requests
@@ -1726,7 +1727,7 @@ class OllamaModelPull(BaseModel):
     name: str
 
 
-# Track active pull operations
+# Track active pull operations (in-memory for quick access)
 _active_pulls: Dict[str, dict] = {}
 
 
@@ -1741,13 +1742,29 @@ async def pull_ollama_model(model: OllamaModelPull, background_tasks: Background
     
     # Check if already pulling
     if model_name in _active_pulls and _active_pulls[model_name].get("status") == "pulling":
-        return {"status": "already_pulling", "model": model_name}
+        return {"status": "already_pulling", "model": model_name, "job_id": _active_pulls[model_name].get("job_id")}
+    
+    # Create a job entry
+    job = jobs_service.create_job(
+        db,
+        job_type=jobs_service.JOB_TYPE_MODEL_PULL,
+        metadata={"model_name": model_name, "ollama_url": url},
+        message="Starting download..."
+    )
+    job_id = str(job.id)
     
     # Start the pull in background
-    _active_pulls[model_name] = {"status": "pulling", "progress": 0, "message": "Starting download..."}
+    _active_pulls[model_name] = {"status": "pulling", "progress": 0, "message": "Starting download...", "job_id": job_id}
     
     def do_pull():
+        # Import here to avoid circular imports and get fresh session
+        from src.db.session import SessionLocal
+        pull_db = SessionLocal()
+        
         try:
+            # Mark job as running
+            jobs_service.start_job(pull_db, job.id, message="Connecting to Ollama...")
+            
             # Use streaming to track progress
             resp = requests.post(
                 f"{url}/api/pull",
@@ -1769,24 +1786,36 @@ async def pull_ollama_model(model: OllamaModelPull, background_tasks: Background
                                 "progress": progress,
                                 "message": status,
                                 "completed": data["completed"],
-                                "total": data["total"]
+                                "total": data["total"],
+                                "job_id": job_id
                             }
+                            # Update job progress (not too frequently - only every 5%)
+                            if progress % 5 == 0:
+                                jobs_service.update_job_progress(
+                                    pull_db, job.id, progress, 
+                                    message=status,
+                                    metadata_updates={"completed": data["completed"], "total": data["total"]}
+                                )
                         elif status == "success":
-                            _active_pulls[model_name] = {"status": "complete", "progress": 100, "message": "Download complete"}
+                            _active_pulls[model_name] = {"status": "complete", "progress": 100, "message": "Download complete", "job_id": job_id}
                         else:
                             _active_pulls[model_name]["message"] = status
                     except json.JSONDecodeError:
                         pass
             
             # Mark as complete
-            _active_pulls[model_name] = {"status": "complete", "progress": 100, "message": "Download complete"}
+            _active_pulls[model_name] = {"status": "complete", "progress": 100, "message": "Download complete", "job_id": job_id}
+            jobs_service.complete_job(pull_db, job.id, message="Download complete")
             
         except Exception as e:
-            _active_pulls[model_name] = {"status": "error", "progress": 0, "message": str(e)}
+            _active_pulls[model_name] = {"status": "error", "progress": 0, "message": str(e), "job_id": job_id}
+            jobs_service.fail_job(pull_db, job.id, error=str(e), message="Download failed")
+        finally:
+            pull_db.close()
     
     background_tasks.add_task(do_pull)
     
-    return {"status": "started", "model": model_name, "message": "Download started"}
+    return {"status": "started", "model": model_name, "message": "Download started", "job_id": job_id}
 
 
 @app.get("/settings/ollama/models/pull/{model_name:path}")
@@ -3495,3 +3524,118 @@ def visualize_embeddings(
         "authors": sorted(authors),
         "file_types": sorted(file_types)
     }
+
+
+# ============================================================================
+# Jobs API - Generic background task tracking
+# ============================================================================
+
+@app.get("/jobs")
+async def list_jobs(
+    job_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    active_only: bool = False,
+    db: Session = Depends(get_db)
+):
+    """List jobs with optional filtering."""
+    if active_only:
+        jobs = jobs_service.get_active_jobs(db)
+    else:
+        jobs = jobs_service.list_jobs(
+            db,
+            job_type=job_type,
+            status=status,
+            limit=limit,
+            include_completed=True
+        )
+    
+    return {
+        "jobs": [jobs_service.job_to_dict(j) for j in jobs],
+        "count": len(jobs)
+    }
+
+
+@app.get("/jobs/active")
+async def get_active_jobs(db: Session = Depends(get_db)):
+    """Get all currently active (pending or running) jobs."""
+    jobs = jobs_service.get_active_jobs(db)
+    return {
+        "jobs": [jobs_service.job_to_dict(j) for j in jobs],
+        "count": len(jobs),
+        "has_active": len(jobs) > 0
+    }
+
+
+@app.get("/jobs/recent")
+async def get_recent_jobs(limit: int = 10, db: Session = Depends(get_db)):
+    """Get recent jobs including completed ones."""
+    jobs = jobs_service.get_recent_jobs(db, limit=limit)
+    return {
+        "jobs": [jobs_service.job_to_dict(j) for j in jobs],
+        "count": len(jobs)
+    }
+
+
+@app.get("/jobs/{job_id}")
+async def get_job(job_id: str, db: Session = Depends(get_db)):
+    """Get a specific job by ID."""
+    from uuid import UUID
+    try:
+        uuid_id = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+    
+    job = jobs_service.get_job(db, uuid_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    return jobs_service.job_to_dict(job)
+
+
+@app.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str, db: Session = Depends(get_db)):
+    """Cancel a pending or running job."""
+    from uuid import UUID
+    try:
+        uuid_id = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+    
+    job = jobs_service.get_job(db, uuid_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status not in [jobs_service.JOB_STATUS_PENDING, jobs_service.JOB_STATUS_RUNNING]:
+        raise HTTPException(status_code=400, detail=f"Cannot cancel job with status: {job.status}")
+    
+    job = jobs_service.cancel_job(db, uuid_id)
+    return jobs_service.job_to_dict(job)
+
+
+@app.delete("/jobs/{job_id}")
+async def delete_job(job_id: str, db: Session = Depends(get_db)):
+    """Delete a completed/failed/cancelled job."""
+    from uuid import UUID
+    try:
+        uuid_id = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+    
+    job = jobs_service.get_job(db, uuid_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status in [jobs_service.JOB_STATUS_PENDING, jobs_service.JOB_STATUS_RUNNING]:
+        raise HTTPException(status_code=400, detail="Cannot delete active job - cancel it first")
+    
+    db.delete(job)
+    db.commit()
+    return {"deleted": True, "id": job_id}
+
+
+@app.post("/jobs/cleanup")
+async def cleanup_old_jobs(days: int = 7, db: Session = Depends(get_db)):
+    """Delete completed/failed jobs older than specified days."""
+    count = jobs_service.cleanup_old_jobs(db, days=days)
+    return {"deleted": count, "days": days}

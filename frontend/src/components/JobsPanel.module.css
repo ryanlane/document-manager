@@ -1,0 +1,250 @@
+.panel {
+  background: var(--card-bg, #1a1a2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panel.compact {
+  border-radius: 8px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  background: var(--bg-secondary, #111);
+  cursor: pointer;
+  user-select: none;
+}
+
+.header:hover {
+  background: var(--bg-hover, #1a1a1a);
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+}
+
+.activeBadge {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  background: var(--accent-color, #4ade80);
+  color: #000;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.expandBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.content {
+  padding: 0.5rem;
+}
+
+.loading, .empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-secondary, #888);
+  font-size: 0.875rem;
+}
+
+.jobsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.jobItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-primary, #0a0a0a);
+  border-radius: 8px;
+  border-left: 3px solid var(--border-color, #333);
+}
+
+.jobItem.running {
+  border-left-color: var(--accent-color, #4ade80);
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.jobItem.pending {
+  border-left-color: var(--warning-color, #f59e0b);
+}
+
+.jobItem.completed {
+  border-left-color: var(--success-color, #22c55e);
+  opacity: 0.7;
+}
+
+.jobItem.failed {
+  border-left-color: var(--error-color, #ef4444);
+}
+
+.jobItem.cancelled {
+  border-left-color: var(--text-secondary, #888);
+  opacity: 0.6;
+}
+
+.jobIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #111);
+  color: var(--accent-color, #4ade80);
+  flex-shrink: 0;
+}
+
+.jobIcon[data-color="blue"] { color: #3b82f6; }
+.jobIcon[data-color="green"] { color: #22c55e; }
+.jobIcon[data-color="purple"] { color: #a855f7; }
+.jobIcon[data-color="orange"] { color: #f59e0b; }
+.jobIcon[data-color="cyan"] { color: #06b6d4; }
+.jobIcon[data-color="pink"] { color: #ec4899; }
+
+.jobInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.jobHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.jobType {
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+  font-size: 0.875rem;
+}
+
+.jobMeta {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #888);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #888);
+}
+
+.progressBar {
+  position: relative;
+  height: 6px;
+  background: var(--bg-secondary, #111);
+  border-radius: 3px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.progressFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent-color, #4ade80);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progressText {
+  position: absolute;
+  right: 4px;
+  top: -14px;
+  font-size: 0.625rem;
+  color: var(--text-secondary, #888);
+}
+
+.jobError {
+  font-size: 0.75rem;
+  color: var(--error-color, #ef4444);
+  margin-top: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+}
+
+.jobActions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.cancelBtn, .deleteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: all 0.2s;
+}
+
+.cancelBtn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--error-color, #ef4444);
+  opacity: 1;
+}
+
+.deleteBtn:hover {
+  background: var(--bg-hover, #1a1a1a);
+  opacity: 1;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Compact mode adjustments */
+.compact .content {
+  padding: 0.25rem;
+}
+
+.compact .jobItem {
+  padding: 0.5rem;
+}
+
+.compact .jobIcon {
+  width: 28px;
+  height: 28px;
+}
