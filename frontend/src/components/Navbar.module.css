@@ -33,6 +33,12 @@
   text-decoration: none;
 }
 
+.mobileControls {
+  display: none;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .toggle {
   display: none;
   background: none;
@@ -74,10 +80,108 @@
   background: rgba(100, 108, 255, 0.1);
 }
 
+.link.primary {
+  font-weight: 500;
+}
+
+.brandText {
+  font-weight: 700;
+}
+
+.helpLabel {
+  /* Can hide on smaller screens if needed */
+}
+
+/* Dropdown Styles */
+.dropdown {
+  position: relative;
+}
+
+.dropdownTrigger {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.dropdownTrigger:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+
+.dropdownTrigger.active {
+  color: var(--color-primary);
+}
+
+.chevron {
+  transition: transform 0.2s;
+  opacity: 0.6;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--spacing-xs);
+  min-width: 180px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  padding: var(--spacing-xs);
+  z-index: 1001;
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+}
+
+.dropdownItem:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+
+.dropdownItem.active {
+  color: var(--color-primary);
+  background: rgba(100, 108, 255, 0.1);
+}
+
 /* Mobile Styles */
 @media (max-width: 768px) {
+  .mobileControls {
+    display: flex;
+  }
+
   .toggle {
     display: flex;
+  }
+
+  .healthIndicatorDesktop {
+    display: none;
+  }
+
+  .notificationsDesktop {
+    display: none;
   }
 
   .links {
@@ -101,4 +205,203 @@
     padding: var(--spacing-md);
     border-radius: var(--radius-md);
   }
+
+  .dropdown {
+    width: 100%;
+  }
+
+  .dropdownTrigger {
+    width: 100%;
+    padding: var(--spacing-md);
+    justify-content: flex-start;
+  }
+
+  .dropdownMenu {
+    position: static;
+    box-shadow: none;
+    border: none;
+    background: var(--color-bg);
+    margin-left: var(--spacing-lg);
+    padding: 0;
+    min-width: auto;
+  }
+
+  .dropdownItem {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .healthIndicator {
+    margin-left: 0;
+    margin-top: 0;
+  }
+
+  .healthButton {
+    width: 36px;
+    min-width: 36px;
+  }
+
+  .healthPopup {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: var(--spacing-sm);
+    width: 300px;
+  }
+}
+
+/* Health Indicator */
+.healthIndicator {
+  position: relative;
+  margin-left: var(--spacing-sm);
+}
+
+.healthIndicatorDesktop {
+  position: relative;
+  margin-left: auto;
+  padding-left: var(--spacing-lg);
+}
+
+.notificationsDesktop {
+  display: block;
+  margin-left: var(--spacing-sm);
+}
+
+.healthButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.healthButton svg,
+.healthButton img {
+  display: block;
+  flex-shrink: 0;
+}
+
+.healthButton:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-text-muted);
+}
+
+.healthOk {
+  filter: brightness(0) saturate(100%) invert(62%) sepia(52%) saturate(405%) hue-rotate(100deg) brightness(95%) contrast(87%);
+}
+
+.healthWarning {
+  filter: brightness(0) saturate(100%) invert(79%) sepia(61%) saturate(1000%) hue-rotate(359deg) brightness(103%) contrast(97%);
+}
+
+.healthError {
+  filter: brightness(0) saturate(100%) invert(52%) sepia(67%) saturate(2000%) hue-rotate(331deg) brightness(100%) contrast(101%);
+}
+
+.healthPopup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--spacing-sm);
+  width: 320px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 1001;
+  overflow: hidden;
+}
+
+.healthPopupHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.healthPopupHeader button {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.healthPopupHeader button:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+
+.healthChecks {
+  padding: var(--spacing-sm);
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--color-surface);
+}
+
+.healthCheck {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  margin-bottom: var(--spacing-xs);
+}
+
+.healthCheck:last-child {
+  margin-bottom: 0;
+}
+
+.healthCheckHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.healthCheckName {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  text-transform: capitalize;
+}
+
+.healthCheckMessage {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  padding-left: 18px;
+}
+
+.healthCheckFix {
+  font-size: 0.7rem;
+  color: var(--color-warning, #fbbf24);
+  padding-left: 18px;
+  font-style: italic;
+}
+
+.healthRefresh {
+  width: 100%;
+  padding: var(--spacing-sm);
+  background: var(--color-bg);
+  border: none;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.healthRefresh:hover {
+  background: var(--color-bg-hover);
 }

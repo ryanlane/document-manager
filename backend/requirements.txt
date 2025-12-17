@@ -8,6 +8,7 @@ pgvector
 tika
 fastapi
 uvicorn
+psutil
 # Image and PDF processing
 Pillow
 pytesseract

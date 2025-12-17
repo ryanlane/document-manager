@@ -1,0 +1,327 @@
+/* Notification Bell */
+.bellContainer {
+  position: relative;
+}
+
+.bellButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.bellButton:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.1));
+  color: var(--text-primary, #fff);
+}
+
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #ef4444;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Notification Panel */
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  background: var(--bg-secondary, #111);
+  border: 1px solid var(--border-color, #222);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color, #222);
+}
+
+.panelHeader h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary, #fff);
+}
+
+.panelActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.panelActions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.panelActions button:hover {
+  border-color: var(--accent-color, #4ade80);
+  color: var(--accent-color, #4ade80);
+}
+
+.panelContent {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-tertiary, #555);
+  gap: 0.5rem;
+}
+
+.emptyState p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* Notification Item */
+.notificationItem {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color, #1a1a1a);
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.notificationItem:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.03));
+}
+
+.notificationItem.read {
+  opacity: 0.6;
+}
+
+.notificationIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-tertiary, #1a1a1a);
+  color: var(--text-secondary, #888);
+  flex-shrink: 0;
+}
+
+.notificationItem.success .notificationIcon {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.notificationItem.error .notificationIcon {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.notificationItem.info .notificationIcon {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.notificationContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.notificationTitle {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+  margin-bottom: 0.15rem;
+}
+
+.notificationMessage {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #888);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notificationTime {
+  font-size: 0.7rem;
+  color: var(--text-tertiary, #555);
+  margin-top: 0.25rem;
+}
+
+.unreadDot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-color, #4ade80);
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* Toast Container */
+.toastContainer {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 9999;
+  max-width: 360px;
+}
+
+/* Toast */
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--bg-secondary, #111);
+  border: 1px solid var(--border-color, #222);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toast.success {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), var(--bg-secondary, #111));
+}
+
+.toast.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), var(--bg-secondary, #111));
+}
+
+.toast.info {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), var(--bg-secondary, #111));
+}
+
+.toastIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-tertiary, #1a1a1a);
+  color: var(--text-secondary, #888);
+  flex-shrink: 0;
+}
+
+.toast.success .toastIcon {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+}
+
+.toast.error .toastIcon {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.toast.info .toastIcon {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.toastContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.toastTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin-bottom: 0.15rem;
+}
+
+.toastMessage {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #888);
+}
+
+.toastDismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-tertiary, #555);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.toastDismiss:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.1));
+  color: var(--text-primary, #fff);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .panel {
+    position: fixed;
+    top: 60px;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+  }
+  
+  .toastContainer {
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+  }
+}

@@ -24,6 +24,12 @@ class Setting(Base):
 
 # Default settings
 DEFAULT_SETTINGS = {
+    # Setup wizard completion flag
+    "setup_complete": False,
+    # Indexing strategy: "fast_scan", "full_enrichment", or "custom"
+    "indexing_mode": "fast_scan",
+    # GPU VRAM in GB (null = auto-detect, 0 = CPU only)
+    "gpu_vram_gb": None,
     "llm": {
         "provider": "ollama",  # ollama, openai, anthropic
         "ollama": {

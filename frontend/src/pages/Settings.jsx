@@ -34,6 +34,9 @@ function Settings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
+  // Environment variable overrides
+  const [envOverrides, setEnvOverrides] = useState({})
+  
   // LLM Endpoints (Workers)
   const [endpoints, setEndpoints] = useState([])
   const [loadingEndpoints, setLoadingEndpoints] = useState(false)
@@ -51,6 +54,12 @@ function Settings() {
   const [showApiKey, setShowApiKey] = useState({ openai: false, anthropic: false })
   const [ollamaModels, setOllamaModels] = useState([])
   const [loadingModels, setLoadingModels] = useState(false)
+  
+  // Model Catalog
+  const [modelCatalog, setModelCatalog] = useState(null)
+  const [loadingCatalog, setLoadingCatalog] = useState(false)
+  const [pullingModels, setPullingModels] = useState({}) // { modelName: { status, progress, message } }
+  const [catalogFilter, setCatalogFilter] = useState('all') // 'all', 'installed', or category name
   
   // Source Settings
   const [sources, setSources] = useState({ include: [], exclude: [] })
@@ -70,7 +79,8 @@ function Settings() {
     await Promise.all([
       loadEndpoints(),
       loadSettings(),
-      loadOllamaModels()
+      loadOllamaModels(),
+      loadModelCatalog()
     ])
     setLoading(false)
   }
@@ -90,11 +100,12 @@ function Settings() {
 
   const loadSettings = async () => {
     try {
-      const [llmRes, srcRes, extRes, mountsRes] = await Promise.all([
+      const [llmRes, srcRes, extRes, mountsRes, envRes] = await Promise.all([
         fetch(`${API_BASE}/settings/llm`),
         fetch(`${API_BASE}/settings/sources`),
         fetch(`${API_BASE}/settings/extensions`),
-        fetch(`${API_BASE}/settings/sources/mounts`)
+        fetch(`${API_BASE}/settings/sources/mounts`),
+        fetch(`${API_BASE}/settings/env-overrides`)
       ])
       
       if (llmRes.ok) setLlmSettings(await llmRes.json())
@@ -104,9 +115,23 @@ function Settings() {
         setExtensions(data.extensions || [])
       }
       if (mountsRes.ok) setAvailableMounts(await mountsRes.json())
+      if (envRes.ok) {
+        const data = await envRes.json()
+        setEnvOverrides(data.overrides || {})
+      }
     } catch (err) {
       console.error('Failed to load settings:', err)
     }
+  }
+
+  // Check if a setting path is locked by env var
+  const isEnvLocked = (path) => {
+    return envOverrides[path]?.locked === true
+  }
+
+  // Get env var name for a locked setting
+  const getEnvVarName = (path) => {
+    return envOverrides[path]?.env_var
   }
 
   const loadOllamaModels = async () => {
@@ -122,6 +147,94 @@ function Settings() {
       console.error('Failed to load models:', err)
     }
     setLoadingModels(false)
+  }
+
+  const loadModelCatalog = async () => {
+    setLoadingCatalog(true)
+    try {
+      const res = await fetch(`${API_BASE}/settings/ollama/catalog`)
+      if (res.ok) {
+        setModelCatalog(await res.json())
+      }
+    } catch (err) {
+      console.error('Failed to load model catalog:', err)
+    }
+    setLoadingCatalog(false)
+  }
+
+  const pullModel = async (modelName) => {
+    setPullingModels(prev => ({ ...prev, [modelName]: { status: 'starting', progress: 0, message: 'Starting download...' } }))
+    
+    try {
+      const res = await fetch(`${API_BASE}/settings/ollama/models/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName })
+      })
+      
+      if (res.ok) {
+        // Poll for progress
+        const pollProgress = async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/settings/ollama/models/pull/${encodeURIComponent(modelName)}`)
+            if (statusRes.ok) {
+              const status = await statusRes.json()
+              setPullingModels(prev => ({ ...prev, [modelName]: status }))
+              
+              if (status.status === 'pulling') {
+                setTimeout(pollProgress, 1000)
+              } else if (status.status === 'complete') {
+                // Refresh models list
+                await loadOllamaModels()
+                await loadModelCatalog()
+                // Remove from pulling after a delay
+                setTimeout(() => {
+                  setPullingModels(prev => {
+                    const updated = { ...prev }
+                    delete updated[modelName]
+                    return updated
+                  })
+                }, 3000)
+              }
+            }
+          } catch (err) {
+            console.error('Failed to poll progress:', err)
+          }
+        }
+        setTimeout(pollProgress, 500)
+      }
+    } catch (err) {
+      setPullingModels(prev => ({ ...prev, [modelName]: { status: 'error', message: err.message } }))
+    }
+  }
+
+  const deleteModel = async (modelName) => {
+    if (!confirm(`Delete model "${modelName}"? This cannot be undone.`)) return
+    
+    try {
+      const res = await fetch(`${API_BASE}/settings/ollama/models/${encodeURIComponent(modelName)}`, {
+        method: 'DELETE'
+      })
+      if (res.ok) {
+        await loadOllamaModels()
+        await loadModelCatalog()
+      } else {
+        alert('Failed to delete model')
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
+  const getFilteredCatalogModels = () => {
+    if (!modelCatalog?.models) return []
+    
+    return modelCatalog.models.filter(model => {
+      if (catalogFilter === 'all') return true
+      if (catalogFilter === 'installed') return model.installed
+      if (catalogFilter === 'recommended') return model.recommended
+      return model.category === catalogFilter
+    })
   }
 
   // === Endpoint Management ===
@@ -525,7 +638,14 @@ function Settings() {
             {/* Model Selectors */}
             <div className={styles.modelGrid}>
               <div className={styles.modelSelect}>
-                <label>Chat Model</label>
+                <label>
+                  Chat Model
+                  {isEnvLocked('ollama.model') && (
+                    <span className={styles.envBadge} title={`Default from ${getEnvVarName('ollama.model')} env var`}>
+                      ENV
+                    </span>
+                  )}
+                </label>
                 <select
                   value={llmSettings.ollama?.model || ''}
                   onChange={(e) => setLlmSettings(prev => ({
@@ -542,7 +662,14 @@ function Settings() {
               </div>
 
               <div className={styles.modelSelect}>
-                <label>Embedding Model</label>
+                <label>
+                  Embedding Model
+                  {isEnvLocked('ollama.embedding_model') && (
+                    <span className={styles.envBadge} title={`Default from ${getEnvVarName('ollama.embedding_model')} env var`}>
+                      ENV
+                    </span>
+                  )}
+                </label>
                 <select
                   value={llmSettings.ollama?.embedding_model || ''}
                   onChange={(e) => setLlmSettings(prev => ({
@@ -559,7 +686,14 @@ function Settings() {
               </div>
 
               <div className={styles.modelSelect}>
-                <label>Vision Model</label>
+                <label>
+                  Vision Model
+                  {isEnvLocked('ollama.vision_model') && (
+                    <span className={styles.envBadge} title={`Default from ${getEnvVarName('ollama.vision_model')} env var`}>
+                      ENV
+                    </span>
+                  )}
+                </label>
                 <select
                   value={llmSettings.ollama?.vision_model || ''}
                   onChange={(e) => setLlmSettings(prev => ({
@@ -623,6 +757,180 @@ function Settings() {
                 </div>
               </div>
             </details>
+
+            {/* Model Library - Download New Models */}
+            <div className={styles.modelLibrary}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h3><Download size={18} /> Model Library</h3>
+                  <p className={styles.description}>
+                    Browse and install models from the catalog.
+                  </p>
+                </div>
+                <button onClick={loadModelCatalog} disabled={loadingCatalog} className={styles.refreshBtn}>
+                  {loadingCatalog ? <Loader2 size={16} className={styles.spinner} /> : <RefreshCw size={16} />}
+                </button>
+              </div>
+
+              {/* GPU VRAM Info & Selector */}
+              <div className={styles.vramSelector}>
+                <label>Your GPU VRAM:</label>
+                <select 
+                  value={modelCatalog?.gpu_info?.vram_gb?.toFixed(0) || '0'}
+                  onChange={(e) => {
+                    const vram = parseFloat(e.target.value)
+                    fetch(`${API_BASE}/settings`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ gpu_vram_gb: vram })
+                    }).then(() => loadModelCatalog())
+                  }}
+                  className={styles.vramSelect}
+                >
+                  <option value="0">CPU Only (No GPU)</option>
+                  {modelCatalog?.vram_tiers?.map(tier => (
+                    <option key={tier} value={tier}>{tier}GB VRAM</option>
+                  ))}
+                  <option value="48">48GB+ VRAM</option>
+                </select>
+                {modelCatalog?.gpu_info?.source === 'detected' && (
+                  <span className={styles.detectedBadge}>Auto-detected</span>
+                )}
+                {modelCatalog?.recommendations && (
+                  <span className={styles.recTip}>
+                    ★ {modelCatalog.models?.filter(m => m.recommended).length} models recommended for your hardware
+                  </span>
+                )}
+              </div>
+
+              {/* Category Filter */}
+              <div className={styles.catalogFilters}>
+                <button 
+                  className={`${styles.filterBtn} ${catalogFilter === 'all' ? styles.active : ''}`}
+                  onClick={() => setCatalogFilter('all')}
+                >
+                  All
+                </button>
+                <button 
+                  className={`${styles.filterBtn} ${styles.recommendedFilter} ${catalogFilter === 'recommended' ? styles.active : ''}`}
+                  onClick={() => setCatalogFilter('recommended')}
+                >
+                  ★ Recommended
+                </button>
+                <button 
+                  className={`${styles.filterBtn} ${catalogFilter === 'installed' ? styles.active : ''}`}
+                  onClick={() => setCatalogFilter('installed')}
+                >
+                  Installed ({modelCatalog?.installed_count || 0})
+                </button>
+                {modelCatalog?.categories && Object.entries(modelCatalog.categories).map(([key, cat]) => (
+                  <button 
+                    key={key}
+                    className={`${styles.filterBtn} ${catalogFilter === key ? styles.active : ''}`}
+                    onClick={() => setCatalogFilter(key)}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Model Cards */}
+              <div className={styles.catalogGrid}>
+                {getFilteredCatalogModels().map(model => {
+                  const pullState = pullingModels[model.name]
+                  const isPulling = pullState?.status === 'pulling' || pullState?.status === 'starting'
+                  const isComplete = pullState?.status === 'complete'
+                  
+                  return (
+                    <div key={model.name} className={`${styles.catalogCard} ${model.installed ? styles.installed : ''} ${model.recommended ? styles.recommended : ''}`}>
+                      <div className={styles.catalogCardHeader}>
+                        <h4>
+                          {model.display_name}
+                          {model.recommended && <span className={styles.recommendedBadge}>★ Recommended</span>}
+                        </h4>
+                        <span className={styles.catalogCategory}>{model.category}</span>
+                      </div>
+                      <p className={styles.catalogDesc}>{model.description}</p>
+                      <div className={styles.catalogMeta}>
+                        <span>{model.size_gb}GB</span>
+                        <span>VRAM: {model.vram_required_gb}GB+</span>
+                      </div>
+                      <div className={styles.catalogActions}>
+                        {model.installed ? (
+                          <>
+                            <span className={styles.installedBadge}><Check size={14} /> Installed</span>
+                            <button 
+                              className={styles.deleteModelBtn}
+                              onClick={() => deleteModel(model.name)}
+                              title="Delete model"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        ) : isPulling ? (
+                          <div className={styles.pullProgress}>
+                            <Loader2 size={14} className={styles.spinner} />
+                            <span>{pullState.progress || 0}%</span>
+                            <div className={styles.progressBar}>
+                              <div 
+                                className={styles.progressFill} 
+                                style={{ width: `${pullState.progress || 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : isComplete ? (
+                          <span className={styles.installedBadge}><Check size={14} /> Downloaded!</span>
+                        ) : (
+                          <button 
+                            className={styles.installBtn}
+                            onClick={() => pullModel(model.name)}
+                          >
+                            <Download size={14} /> Install
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {modelCatalog?.recommendations && (
+                <div className={styles.recommendations}>
+                  <div className={styles.recHeader}>
+                    <h4>💡 Recommended for your GPU ({modelCatalog.recommendations.vram_tier}GB+ VRAM)</h4>
+                    <button 
+                      className={styles.useRecBtn}
+                      onClick={() => {
+                        const recs = modelCatalog.recommendations
+                        setLlmSettings(prev => ({
+                          ...prev,
+                          ollama: {
+                            ...prev.ollama,
+                            model: recs.chat || prev.ollama?.model || '',
+                            embedding_model: recs.embedding || prev.ollama?.embedding_model || '',
+                            vision_model: recs.vision || prev.ollama?.vision_model || ''
+                          }
+                        }))
+                      }}
+                      title="Set all model selections to recommended values"
+                    >
+                      <Check size={14} /> Use Recommended
+                    </button>
+                  </div>
+                  <div className={styles.recList}>
+                    {modelCatalog.recommendations.chat && (
+                      <span>Chat: <strong>{modelCatalog.recommendations.chat}</strong></span>
+                    )}
+                    {modelCatalog.recommendations.embedding && (
+                      <span>Embedding: <strong>{modelCatalog.recommendations.embedding}</strong></span>
+                    )}
+                    {modelCatalog.recommendations.vision && (
+                      <span>Vision: <strong>{modelCatalog.recommendations.vision}</strong></span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -661,9 +969,66 @@ function Settings() {
                   })}
                 </div>
               ) : (
-                <p className={styles.noMounts}>No folders mounted. Add volumes in docker-compose.yml</p>
+                <p className={styles.noMounts}>No folders mounted. See below for how to add volumes.</p>
               )}
             </div>
+
+            {/* How to Add Folders Guide */}
+            <details className={styles.mountGuide}>
+              <summary className={styles.guideHeader}>
+                <FolderPlus size={16} /> How to Add Folders
+              </summary>
+              <div className={styles.guideContent}>
+                <p>
+                  Archive Brain runs in Docker, so folders from your system must be "mounted" into the container.
+                  Edit your <code>docker-compose.yml</code> file and add volumes to the <code>api</code> and <code>worker</code> services.
+                </p>
+                
+                <h5>Example: Adding a folder</h5>
+                <div className={styles.codeBlock}>
+                  <pre>{`services:
+  api:
+    volumes:
+      - ./archive_root:/data/archive        # Default
+      - /path/to/your/files:/data/archive/my-files  # Add this line
+      
+  worker:
+    volumes:
+      - ./archive_root:/data/archive        # Default  
+      - /path/to/your/files:/data/archive/my-files  # Add same line here`}</pre>
+                  <button 
+                    className={styles.copyBtn}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`      - /path/to/your/files:/data/archive/my-files`)
+                      alert('Copied to clipboard!')
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                
+                <h5>Common Scenarios</h5>
+                <div className={styles.scenarioList}>
+                  <div className={styles.scenario}>
+                    <strong>📁 Local folder:</strong>
+                    <code>- /home/user/documents:/data/archive/documents</code>
+                  </div>
+                  <div className={styles.scenario}>
+                    <strong>💾 External drive:</strong>
+                    <code>- /mnt/external:/data/archive/external</code>
+                  </div>
+                  <div className={styles.scenario}>
+                    <strong>🌐 Network share (NFS/SMB):</strong>
+                    <code>- /mnt/nas/files:/data/archive/nas</code>
+                  </div>
+                </div>
+                
+                <p className={styles.guideNote}>
+                  <strong>After editing:</strong> Run <code>docker compose up -d</code> to apply changes.
+                  The new folder will appear in "Available Folders" above.
+                </p>
+              </div>
+            </details>
 
             {/* Active Sources */}
             <div className={styles.activeList}>

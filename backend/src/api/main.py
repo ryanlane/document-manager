@@ -110,6 +110,287 @@ def save_worker_state(state):
 def health_check():
     return {"status": "ok"}
 
+@app.get("/system/health-check")
+def system_health_check(db: Session = Depends(get_db)):
+    """
+    Comprehensive system health check for first-run wizard and navbar indicator.
+    Returns status for each component: 'ok', 'warning', or 'error'.
+    """
+    import shutil
+    import psutil
+    
+    checks = {}
+    overall_status = "ok"  # ok, warning, error
+    
+    # 1. Database connectivity
+    try:
+        db.execute(text("SELECT 1"))
+        checks["database"] = {
+            "status": "ok",
+            "message": "Database connected"
+        }
+    except Exception as e:
+        checks["database"] = {
+            "status": "error",
+            "message": f"Database unreachable: {str(e)}",
+            "fix": "Check DATABASE_URL and ensure PostgreSQL is running"
+        }
+        overall_status = "error"
+    
+    # 2. Ollama connectivity
+    try:
+        resp = requests.get(f"{OLLAMA_URL}", timeout=3)
+        if resp.status_code == 200:
+            # Check if models are available
+            models = list_models()
+            if len(models) > 0:
+                checks["ollama"] = {
+                    "status": "ok",
+                    "message": f"Ollama online with {len(models)} models",
+                    "url": OLLAMA_URL,
+                    "models": models[:5]  # First 5 for display
+                }
+            else:
+                checks["ollama"] = {
+                    "status": "warning",
+                    "message": "Ollama online but no models installed",
+                    "url": OLLAMA_URL,
+                    "fix": "Pull a model: ollama pull phi4-mini"
+                }
+                if overall_status == "ok":
+                    overall_status = "warning"
+        else:
+            raise Exception(f"HTTP {resp.status_code}")
+    except Exception as e:
+        checks["ollama"] = {
+            "status": "error",
+            "message": f"Ollama unreachable at {OLLAMA_URL}",
+            "url": OLLAMA_URL,
+            "fix": "Ensure Ollama container is running and OLLAMA_URL is correct"
+        }
+        if overall_status != "error":
+            overall_status = "error"
+    
+    # 3. GPU availability (check via Ollama if possible)
+    gpu_info = None
+    try:
+        # Try to get GPU info from nvidia-smi if available in container
+        import subprocess
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=name,memory.total,memory.free', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=5, check=False
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().split('\n')
+            gpus = []
+            for line in lines:
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) >= 3:
+                    gpus.append({
+                        "name": parts[0],
+                        "vram_total_mb": int(parts[1]),
+                        "vram_free_mb": int(parts[2])
+                    })
+            if gpus:
+                gpu_info = gpus
+                checks["gpu"] = {
+                    "status": "ok",
+                    "message": f"{len(gpus)} GPU(s) detected",
+                    "gpus": gpus
+                }
+    except Exception:
+        pass
+    
+    if gpu_info is None:
+        checks["gpu"] = {
+            "status": "warning",
+            "message": "No GPU detected or nvidia-smi not available",
+            "fix": "Processing will use CPU (slower). For GPU, install NVIDIA Container Toolkit."
+        }
+        if overall_status == "ok":
+            overall_status = "warning"
+    
+    # 4. Disk space
+    try:
+        # Check /data/archive if mounted, otherwise /app
+        archive_path = "/data/archive" if os.path.exists("/data/archive") else "/app"
+        disk = shutil.disk_usage(archive_path)
+        free_gb = disk.free / (1024 ** 3)
+        total_gb = disk.total / (1024 ** 3)
+        used_pct = (disk.used / disk.total) * 100
+        
+        if free_gb < 1:
+            checks["disk"] = {
+                "status": "error",
+                "message": f"Critical: Only {free_gb:.1f}GB free",
+                "free_gb": round(free_gb, 1),
+                "total_gb": round(total_gb, 1),
+                "used_percent": round(used_pct, 1),
+                "fix": "Free up disk space or add more storage"
+            }
+            overall_status = "error"
+        elif free_gb < 10:
+            checks["disk"] = {
+                "status": "warning",
+                "message": f"Low disk space: {free_gb:.1f}GB free",
+                "free_gb": round(free_gb, 1),
+                "total_gb": round(total_gb, 1),
+                "used_percent": round(used_pct, 1),
+                "fix": "Consider freeing up disk space"
+            }
+            if overall_status == "ok":
+                overall_status = "warning"
+        else:
+            checks["disk"] = {
+                "status": "ok",
+                "message": f"{free_gb:.1f}GB free of {total_gb:.1f}GB",
+                "free_gb": round(free_gb, 1),
+                "total_gb": round(total_gb, 1),
+                "used_percent": round(used_pct, 1)
+            }
+    except Exception as e:
+        checks["disk"] = {
+            "status": "warning",
+            "message": f"Could not check disk space: {str(e)}"
+        }
+    
+    # 5. Memory
+    try:
+        mem = psutil.virtual_memory()
+        available_gb = mem.available / (1024 ** 3)
+        total_gb = mem.total / (1024 ** 3)
+        used_pct = mem.percent
+        
+        if available_gb < 1:
+            checks["memory"] = {
+                "status": "warning",
+                "message": f"Low memory: {available_gb:.1f}GB available",
+                "available_gb": round(available_gb, 1),
+                "total_gb": round(total_gb, 1),
+                "used_percent": round(used_pct, 1),
+                "fix": "Close other applications or add more RAM"
+            }
+            if overall_status == "ok":
+                overall_status = "warning"
+        else:
+            checks["memory"] = {
+                "status": "ok",
+                "message": f"{available_gb:.1f}GB available of {total_gb:.1f}GB",
+                "available_gb": round(available_gb, 1),
+                "total_gb": round(total_gb, 1),
+                "used_percent": round(used_pct, 1)
+            }
+    except Exception as e:
+        checks["memory"] = {
+            "status": "warning",
+            "message": f"Could not check memory: {str(e)}"
+        }
+    
+    # 6. Worker status
+    worker_state = get_worker_state()
+    if worker_state.get("running", False):
+        checks["worker"] = {
+            "status": "ok",
+            "message": "Worker is running",
+            "state": worker_state
+        }
+    else:
+        checks["worker"] = {
+            "status": "warning",
+            "message": "Worker is paused",
+            "state": worker_state,
+            "fix": "Enable worker from Dashboard to start processing"
+        }
+        # Don't change overall status for paused worker - that's intentional
+    
+    # 7. Source folders
+    try:
+        folders = get_source_folders(db)
+        if len(folders) > 0:
+            # Check if folders exist
+            existing = [f for f in folders if os.path.exists(f)]
+            if len(existing) == len(folders):
+                checks["sources"] = {
+                    "status": "ok",
+                    "message": f"{len(folders)} source folder(s) configured",
+                    "folders": folders
+                }
+            else:
+                missing = [f for f in folders if f not in existing]
+                checks["sources"] = {
+                    "status": "warning",
+                    "message": f"{len(missing)} folder(s) not accessible",
+                    "folders": folders,
+                    "missing": missing,
+                    "fix": "Check volume mounts in docker-compose.yml"
+                }
+                if overall_status == "ok":
+                    overall_status = "warning"
+        else:
+            checks["sources"] = {
+                "status": "warning",
+                "message": "No source folders configured",
+                "fix": "Add source folders in Settings to start indexing"
+            }
+            if overall_status == "ok":
+                overall_status = "warning"
+    except Exception as e:
+        checks["sources"] = {
+            "status": "warning",
+            "message": f"Could not check source folders: {str(e)}"
+        }
+    
+    return {
+        "status": overall_status,
+        "checks": checks,
+        "timestamp": __import__('datetime').datetime.utcnow().isoformat()
+    }
+
+
+@app.get("/system/first-run")
+def check_first_run(db: Session = Depends(get_db)):
+    """
+    Detect if this is a first-run scenario requiring setup wizard.
+    Returns whether setup is needed and current setup state.
+    """
+    setup_complete = get_setting(db, "setup_complete")
+    indexing_mode = get_setting(db, "indexing_mode")
+    
+    # Count processed files to see if any work has been done
+    file_count = db.query(func.count(RawFile.id)).scalar() or 0
+    entry_count = db.query(func.count(Entry.id)).scalar() or 0
+    
+    # Get current settings for the wizard to pre-populate
+    settings = get_all_settings(db)
+    
+    return {
+        "setup_required": not setup_complete,
+        "setup_complete": bool(setup_complete),
+        "indexing_mode": indexing_mode or "fast_scan",
+        "has_files": file_count > 0,
+        "has_entries": entry_count > 0,
+        "file_count": file_count,
+        "entry_count": entry_count,
+        "current_settings": {
+            "llm_provider": settings.get("llm", {}).get("provider", "ollama"),
+            "source_folders": settings.get("sources", {}).get("include", []),
+            "extensions": settings.get("extensions", [])
+        }
+    }
+
+
+@app.post("/system/complete-setup")
+def complete_setup(db: Session = Depends(get_db)):
+    """
+    Mark setup as complete. Called when user finishes the setup wizard.
+    """
+    success = set_setting(db, "setup_complete", True)
+    if success:
+        return {"status": "ok", "message": "Setup marked as complete"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save setup status")
+
+
 @app.get("/worker/state")
 def get_worker_state_endpoint():
     """Get current worker process states."""
@@ -177,7 +458,31 @@ def get_worker_progress():
         if legacy:
             result['embed'] = legacy
     
-    return result
+    # Compute summary fields for notifications
+    phases = {}
+    any_active = False
+    total_progress = 0
+    active_phases = 0
+    
+    for phase_name, phase_data in result.items():
+        if isinstance(phase_data, dict):
+            phases[phase_name] = phase_data
+            if phase_data.get('status') == 'running':
+                any_active = True
+                current = phase_data.get('current', 0) or 0
+                total = phase_data.get('total', 0) or 0
+                if total > 0:
+                    total_progress += (current / total) * 100
+                    active_phases += 1
+    
+    # Calculate overall progress as average of active phases
+    overall_progress = total_progress / active_phases if active_phases > 0 else 0
+    
+    return {
+        "phases": phases,
+        "any_active": any_active,
+        "overall_progress": round(overall_progress, 1)
+    }
 
 @app.get("/worker/logs")
 def get_worker_logs(lines: int = 100):
@@ -628,16 +933,61 @@ def ensure_settings_table(db: Session):
         db.rollback()
 
 
+# Environment variable mapping for settings
+ENV_VAR_MAPPINGS = {
+    "ollama.url": ("OLLAMA_URL", "http://ollama:11434"),
+    "ollama.model": ("OLLAMA_MODEL", None),
+    "ollama.embedding_model": ("OLLAMA_EMBEDDING_MODEL", None),
+    "ollama.vision_model": ("OLLAMA_VISION_MODEL", None),
+    "openai.api_key": ("OPENAI_API_KEY", None),
+    "openai.model": ("OPENAI_MODEL", None),
+    "anthropic.api_key": ("ANTHROPIC_API_KEY", None),
+    "anthropic.model": ("ANTHROPIC_MODEL", None),
+}
+
+
+def get_env_overrides():
+    """
+    Check which settings are overridden by environment variables.
+    Returns a dict of setting paths that are locked by env vars.
+    """
+    overrides = {}
+    for setting_path, (env_var, default) in ENV_VAR_MAPPINGS.items():
+        env_value = os.getenv(env_var)
+        # Only consider it an override if explicitly set (not using default)
+        if env_value is not None and env_value != "":
+            overrides[setting_path] = {
+                "env_var": env_var,
+                "value": env_value if "api_key" not in setting_path.lower() else "***",
+                "locked": True
+            }
+    return overrides
+
+
+@app.get("/settings/env-overrides")
+def get_environment_overrides():
+    """
+    Get list of settings that are locked by environment variables.
+    These settings cannot be changed from the UI.
+    """
+    return {
+        "overrides": get_env_overrides(),
+        "message": "These settings are controlled by environment variables and cannot be changed in the UI."
+    }
+
+
 @app.get("/settings")
 def get_settings_all(db: Session = Depends(get_db)):
-    """Get all settings."""
+    """Get all settings with env override information."""
     ensure_settings_table(db)
-    return get_all_settings(db)
+    settings = get_all_settings(db)
+    settings["env_overrides"] = get_env_overrides()
+    return settings
 
 
 @app.get("/settings/llm")
 def get_llm_settings(db: Session = Depends(get_db)):
-    """Get LLM configuration."""
+    """Get LLM configuration with env override info."""
     ensure_settings_table(db)
     llm = get_setting(db, "llm") or DEFAULT_SETTINGS["llm"]
     
@@ -659,9 +1009,13 @@ def get_llm_settings(db: Session = Depends(get_db)):
         api_key = llm.get("anthropic", {}).get("api_key", "")
         status = "configured" if api_key else "not_configured"
     
+    # Get env overrides for LLM settings
+    env_overrides = get_env_overrides()
+    
     return {
         **llm,
-        "status": status
+        "status": status,
+        "env_overrides": env_overrides
     }
 
 
@@ -842,6 +1196,63 @@ def remove_exclude_pattern_endpoint(pattern: ExcludePatternAdd, db: Session = De
     if remove_exclude_pattern(db, pattern.pattern):
         return {"message": f"Removed exclude pattern: {pattern.pattern}"}
     raise HTTPException(status_code=500, detail="Failed to remove exclude pattern")
+
+
+class SourcesUpdate(BaseModel):
+    include: List[str]
+    exclude: List[str] = []
+
+
+@app.put("/settings/sources")
+def update_sources_settings(update: SourcesUpdate, db: Session = Depends(get_db)):
+    """Update source folder configuration (bulk update)."""
+    ensure_settings_table(db)
+    
+    # Validate all paths exist
+    for path in update.include:
+        if not os.path.exists(path):
+            raise HTTPException(status_code=400, detail=f"Path does not exist: {path}")
+        if not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail=f"Path is not a directory: {path}")
+    
+    # Save the updated sources
+    sources = {
+        "include": update.include,
+        "exclude": update.exclude
+    }
+    if set_setting(db, "sources", sources):
+        return {"message": "Sources updated", "sources": sources}
+    raise HTTPException(status_code=500, detail="Failed to update sources")
+
+
+class GenericSettingsUpdate(BaseModel):
+    indexing_mode: Optional[str] = None
+    setup_complete: Optional[bool] = None
+    gpu_vram_gb: Optional[float] = None
+
+
+@app.put("/settings")
+def update_generic_settings(update: GenericSettingsUpdate, db: Session = Depends(get_db)):
+    """Update generic settings (indexing_mode, setup_complete, gpu_vram_gb, etc.)."""
+    ensure_settings_table(db)
+    
+    updated = {}
+    if update.indexing_mode is not None:
+        if update.indexing_mode not in ["fast_scan", "full_enrichment", "custom"]:
+            raise HTTPException(status_code=400, detail="Invalid indexing_mode")
+        set_setting(db, "indexing_mode", update.indexing_mode)
+        updated["indexing_mode"] = update.indexing_mode
+    
+    if update.setup_complete is not None:
+        set_setting(db, "setup_complete", update.setup_complete)
+        updated["setup_complete"] = update.setup_complete
+    
+    if update.gpu_vram_gb is not None:
+        # 0 means CPU only, any positive value is VRAM in GB
+        set_setting(db, "gpu_vram_gb", update.gpu_vram_gb)
+        updated["gpu_vram_gb"] = update.gpu_vram_gb
+    
+    return {"message": "Settings updated", "updated": updated}
 
 
 @app.get("/settings/extensions")
@@ -1500,6 +1911,117 @@ POPULAR_OLLAMA_MODELS = {
 def get_popular_models():
     """Get list of popular Ollama models for each capability."""
     return POPULAR_OLLAMA_MODELS
+
+
+@app.get("/settings/ollama/catalog")
+def get_model_catalog(db: Session = Depends(get_db)):
+    """
+    Get curated model catalog merged with installed status.
+    Returns models from the catalog JSON with installation status.
+    """
+    import pathlib
+    
+    ensure_settings_table(db)
+    llm = get_setting(db, "llm") or DEFAULT_SETTINGS["llm"]
+    url = llm.get("ollama", {}).get("url", "http://ollama:11434")
+    
+    # Load the catalog JSON
+    catalog_path = pathlib.Path(__file__).parent.parent / "config" / "model_catalog.json"
+    try:
+        with open(catalog_path, 'r') as f:
+            catalog = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load model catalog: {str(e)}")
+    
+    # Get installed models from Ollama
+    installed_models = set()
+    try:
+        resp = requests.get(f"{url}/api/tags", timeout=10)
+        if resp.status_code == 200:
+            for m in resp.json().get("models", []):
+                # Store both full name and base name for matching
+                name = m.get("name", "")
+                installed_models.add(name)
+                # Also add without tag (e.g., "llama3.1:8b" -> "llama3.1")
+                if ":" in name:
+                    installed_models.add(name.split(":")[0])
+    except Exception:
+        pass  # Ollama might be offline, continue with empty installed list
+    
+    # Merge installation status into catalog models
+    models_with_status = []
+    for model in catalog.get("models", []):
+        name = model["name"]
+        # Check if installed (match full name or base name)
+        base_name = name.split(":")[0] if ":" in name else name
+        is_installed = name in installed_models or base_name in installed_models
+        
+        models_with_status.append({
+            **model,
+            "installed": is_installed
+        })
+    
+    # Get GPU info for recommendations
+    # First check stored setting, then try auto-detection
+    gpu_info = None
+    vram_source = "unknown"
+    
+    # Check stored GPU setting first (using the injected db session)
+    try:
+        stored_vram = get_setting(db, "gpu_vram_gb")
+        if stored_vram is not None and stored_vram > 0:
+            gpu_info = {"vram_gb": stored_vram}
+            vram_source = "configured"
+    except Exception as e:
+        logger.warning(f"Failed to read gpu_vram_gb setting: {e}")
+    
+    # Try auto-detection if not configured
+    if gpu_info is None:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+                capture_output=True, text=True, timeout=5, check=False
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                vram_mb = int(result.stdout.strip().split('\n')[0])
+                gpu_info = {"vram_gb": vram_mb / 1024}
+                vram_source = "detected"
+        except Exception:
+            pass
+    
+    # Determine recommended VRAM tier and mark recommended models
+    recommendations = None
+    recommended_models = set()
+    vram_recs = catalog.get("vram_recommendations", {})
+    
+    if gpu_info:
+        vram_gb = gpu_info["vram_gb"]
+        gpu_info["source"] = vram_source
+        # Find the highest tier that fits
+        for tier in sorted([int(k) for k in vram_recs.keys()], reverse=True):
+            if vram_gb >= tier:
+                tier_recs = vram_recs[str(tier)]
+                recommendations = {**tier_recs, "vram_tier": tier}
+                # Extract recommended model names from chat, embedding, vision fields
+                for model_name in [tier_recs.get("chat"), tier_recs.get("embedding"), tier_recs.get("vision")]:
+                    if model_name:
+                        recommended_models.add(model_name)
+                break
+    
+    # Add recommended flag to models
+    for model in models_with_status:
+        model["recommended"] = model["name"] in recommended_models
+    
+    return {
+        "categories": catalog.get("categories", {}),
+        "models": models_with_status,
+        "installed_count": len([m for m in models_with_status if m["installed"]]),
+        "gpu_info": gpu_info,
+        "recommendations": recommendations,
+        "vram_tiers": list(sorted([int(k) for k in vram_recs.keys()])),
+        "ollama_url": url
+    }
 
 
 @app.get("/files/{file_id}/content")

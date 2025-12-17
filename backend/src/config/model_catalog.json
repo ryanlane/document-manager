@@ -1,0 +1,257 @@
+{
+  "version": "1.0",
+  "updated": "2024-12-17",
+  "categories": {
+    "fast": {
+      "name": "Fast",
+      "description": "Quick responses, lower resource usage",
+      "icon": "zap"
+    },
+    "balanced": {
+      "name": "Balanced", 
+      "description": "Good quality with reasonable speed",
+      "icon": "scale"
+    },
+    "quality": {
+      "name": "Quality",
+      "description": "Best results, higher resource usage",
+      "icon": "sparkles"
+    },
+    "embedding": {
+      "name": "Embedding",
+      "description": "For semantic search and similarity",
+      "icon": "search"
+    },
+    "vision": {
+      "name": "Vision",
+      "description": "Image understanding and description",
+      "icon": "eye"
+    },
+    "code": {
+      "name": "Code",
+      "description": "Programming and code analysis",
+      "icon": "code"
+    }
+  },
+  "models": [
+    {
+      "name": "qwen2:1.5b",
+      "display_name": "Qwen2 1.5B",
+      "description": "Lightweight and fast, good for basic tasks",
+      "category": "fast",
+      "size_gb": 1.0,
+      "vram_required_gb": 2,
+      "capabilities": ["chat", "summarization"],
+      "recommended_for": ["Low VRAM systems", "Quick responses"],
+      "context_length": 32768
+    },
+    {
+      "name": "tinyllama",
+      "display_name": "TinyLlama",
+      "description": "Extremely lightweight, runs on minimal hardware",
+      "category": "fast",
+      "size_gb": 0.6,
+      "vram_required_gb": 1,
+      "capabilities": ["chat"],
+      "recommended_for": ["Minimal hardware", "Testing"],
+      "context_length": 2048
+    },
+    {
+      "name": "phi4-mini",
+      "display_name": "Phi-4 Mini",
+      "description": "Microsoft's efficient model, excellent quality for size",
+      "category": "balanced",
+      "size_gb": 2.5,
+      "vram_required_gb": 4,
+      "capabilities": ["chat", "reasoning", "summarization"],
+      "recommended_for": ["Most users", "Good balance of speed and quality"],
+      "context_length": 16384
+    },
+    {
+      "name": "mistral:7b",
+      "display_name": "Mistral 7B",
+      "description": "High quality open-source model",
+      "category": "balanced",
+      "size_gb": 4.1,
+      "vram_required_gb": 6,
+      "capabilities": ["chat", "reasoning", "summarization"],
+      "recommended_for": ["Quality-focused tasks"],
+      "context_length": 32768
+    },
+    {
+      "name": "gemma2:9b",
+      "display_name": "Gemma 2 9B",
+      "description": "Google's efficient and capable model",
+      "category": "balanced",
+      "size_gb": 5.4,
+      "vram_required_gb": 8,
+      "capabilities": ["chat", "reasoning", "summarization"],
+      "recommended_for": ["General purpose"],
+      "context_length": 8192
+    },
+    {
+      "name": "llama3.1:8b",
+      "display_name": "Llama 3.1 8B",
+      "description": "Meta's latest, excellent general-purpose model",
+      "category": "quality",
+      "size_gb": 4.7,
+      "vram_required_gb": 8,
+      "capabilities": ["chat", "reasoning", "summarization", "coding"],
+      "recommended_for": ["Best quality for 8GB+ VRAM"],
+      "context_length": 131072
+    },
+    {
+      "name": "phi4",
+      "display_name": "Phi-4",
+      "description": "Microsoft's full-size Phi model, exceptional reasoning",
+      "category": "quality",
+      "size_gb": 8.5,
+      "vram_required_gb": 12,
+      "capabilities": ["chat", "reasoning", "summarization", "coding"],
+      "recommended_for": ["High-end systems"],
+      "context_length": 16384
+    },
+    {
+      "name": "llama3.1:70b",
+      "display_name": "Llama 3.1 70B",
+      "description": "Meta's largest open model, near GPT-4 quality",
+      "category": "quality",
+      "size_gb": 40,
+      "vram_required_gb": 48,
+      "capabilities": ["chat", "reasoning", "summarization", "coding"],
+      "recommended_for": ["Enterprise", "Maximum quality"],
+      "context_length": 131072
+    },
+    {
+      "name": "nomic-embed-text",
+      "display_name": "Nomic Embed Text",
+      "description": "Excellent embedding model for semantic search",
+      "category": "embedding",
+      "size_gb": 0.3,
+      "vram_required_gb": 1,
+      "capabilities": ["embedding"],
+      "recommended_for": ["Semantic search", "Document similarity"],
+      "context_length": 8192,
+      "default": true
+    },
+    {
+      "name": "mxbai-embed-large",
+      "display_name": "MixedBread Embed Large",
+      "description": "High-quality embeddings, slightly larger",
+      "category": "embedding",
+      "size_gb": 0.7,
+      "vram_required_gb": 2,
+      "capabilities": ["embedding"],
+      "recommended_for": ["Higher quality embeddings"],
+      "context_length": 512
+    },
+    {
+      "name": "llava:7b",
+      "display_name": "LLaVA 7B",
+      "description": "Vision-language model for image understanding",
+      "category": "vision",
+      "size_gb": 4.5,
+      "vram_required_gb": 8,
+      "capabilities": ["vision", "chat"],
+      "recommended_for": ["Image description", "OCR assist"],
+      "context_length": 4096
+    },
+    {
+      "name": "llava:13b",
+      "display_name": "LLaVA 13B",
+      "description": "Larger vision model for better image understanding",
+      "category": "vision",
+      "size_gb": 8.0,
+      "vram_required_gb": 16,
+      "capabilities": ["vision", "chat"],
+      "recommended_for": ["High-quality image analysis"],
+      "context_length": 4096
+    },
+    {
+      "name": "minicpm-v",
+      "display_name": "MiniCPM-V",
+      "description": "Efficient vision model with good OCR capabilities",
+      "category": "vision",
+      "size_gb": 5.5,
+      "vram_required_gb": 8,
+      "capabilities": ["vision", "ocr", "chat"],
+      "recommended_for": ["Document images", "OCR"],
+      "context_length": 4096
+    },
+    {
+      "name": "codellama:7b",
+      "display_name": "Code Llama 7B",
+      "description": "Specialized for code generation and analysis",
+      "category": "code",
+      "size_gb": 3.8,
+      "vram_required_gb": 6,
+      "capabilities": ["coding", "chat"],
+      "recommended_for": ["Code analysis", "Programming help"],
+      "context_length": 16384
+    },
+    {
+      "name": "deepseek-coder:6.7b",
+      "display_name": "DeepSeek Coder 6.7B",
+      "description": "Strong coding model from DeepSeek",
+      "category": "code",
+      "size_gb": 3.8,
+      "vram_required_gb": 6,
+      "capabilities": ["coding", "chat"],
+      "recommended_for": ["Code generation", "Debugging"],
+      "context_length": 16384
+    },
+    {
+      "name": "qwen2.5-coder:7b",
+      "display_name": "Qwen 2.5 Coder 7B",
+      "description": "Alibaba's coding model, excellent for programming",
+      "category": "code",
+      "size_gb": 4.4,
+      "vram_required_gb": 8,
+      "capabilities": ["coding", "chat"],
+      "recommended_for": ["Code generation", "Analysis"],
+      "context_length": 131072
+    }
+  ],
+  "vram_recommendations": {
+    "2": {
+      "chat": "qwen2:1.5b",
+      "embedding": "nomic-embed-text",
+      "vision": null
+    },
+    "4": {
+      "chat": "phi4-mini",
+      "embedding": "nomic-embed-text",
+      "vision": null
+    },
+    "6": {
+      "chat": "mistral:7b",
+      "embedding": "nomic-embed-text",
+      "vision": null
+    },
+    "8": {
+      "chat": "llama3.1:8b",
+      "embedding": "nomic-embed-text",
+      "vision": "llava:7b"
+    },
+    "12": {
+      "chat": "phi4",
+      "embedding": "nomic-embed-text",
+      "vision": "llava:7b"
+    },
+    "16": {
+      "chat": "phi4",
+      "embedding": "nomic-embed-text",
+      "vision": "llava:13b"
+    },
+    "24": {
+      "chat": "llama3.1:8b",
+      "embedding": "nomic-embed-text",
+      "vision": "llava:13b"
+    },
+    "48": {
+      "chat": "llama3.1:70b",
+      "embedding": "nomic-embed-text",
+      "vision": "llava:13b"
+    }
+  }
+}
