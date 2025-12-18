@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { 
   Database, FileText, Layers, Cpu, HardDrive, Clock, AlertCircle, 
   Play, Pause, Power, RefreshCw, FilePlus, Binary, Sparkles, Search,
-  ArrowRight, FileCheck, Loader2, Zap, Box, Download, ArrowDown, CheckCircle, X
+  ArrowRight, FileCheck, Loader2, Zap, Box, Download, ArrowDown, CheckCircle, X,
+  Calendar, Moon
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import JobsPanel from '../components/JobsPanel'
@@ -88,6 +89,7 @@ function Dashboard() {
   const [pendingToggles, setPendingToggle] = usePendingToggles()
   const [systemStatus, setSystemStatus] = useState(null)
   const [workerStats, setWorkerStats] = useState(null)
+  const [scheduleStatus, setScheduleStatus] = useState(null)
   
   // Secondary data - loads after
   const [storage, setStorage] = useState(null)
@@ -190,6 +192,14 @@ function Dashboard() {
       const data = await res.json()
       setWorkerStats(data)
     } catch (err) { console.error('worker stats:', err) }
+  }, [])
+
+  const fetchScheduleStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/worker/schedule-status')
+      const data = await res.json()
+      setScheduleStatus(data)
+    } catch (err) { console.error('schedule status:', err) }
   }, [])
 
   // Lazy secondary loads
@@ -296,6 +306,7 @@ function Dashboard() {
     fetchWorkerProgress()
     fetchSystemStatus()
     fetchWorkerStats()
+    fetchScheduleStatus()
     
     // Load secondary data with slight delay
     const secondaryTimer = setTimeout(() => {
@@ -322,6 +333,7 @@ function Dashboard() {
     const statsInterval = setInterval(fetchWorkerStats, 10000) // Was 5000
     const storageInterval = setInterval(fetchStorage, 60000) // Was 30000
     const inheritanceInterval = setInterval(fetchInheritanceStats, 30000) // Was 10000
+    const scheduleInterval = setInterval(fetchScheduleStatus, 60000) // Check schedule every minute
     
     return () => {
       clearInterval(countsInterval)
@@ -331,11 +343,12 @@ function Dashboard() {
       clearInterval(statsInterval)
       clearInterval(storageInterval)
       clearInterval(inheritanceInterval)
+      clearInterval(scheduleInterval)
       // Clean up toast timeouts
       toastTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId))
       toastTimeoutsRef.current.clear()
     }
-  }, [isVisible, fetchCounts, fetchDocCounts, fetchWorkerState, fetchWorkerProgress, fetchWorkerStats, fetchStorage, fetchInheritanceStats])
+  }, [isVisible, fetchCounts, fetchDocCounts, fetchWorkerState, fetchWorkerProgress, fetchWorkerStats, fetchStorage, fetchInheritanceStats, fetchScheduleStatus])
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 B'
@@ -406,6 +419,18 @@ function Dashboard() {
           {pendingToggles.running ? <Loader2 size={16} className={styles.spin} /> : (workerState?.running ? <Pause size={16} /> : <Play size={16} />)}
           {workerState?.running ? 'Running' : 'Paused'}
         </button>
+        
+        {/* Schedule Status Badge */}
+        {scheduleStatus?.enabled && (
+          <Link 
+            to="/settings?tab=workers"
+            className={`${styles.scheduleBadge} ${scheduleStatus.in_window ? styles.active : styles.paused}`}
+            title={`Schedule: ${scheduleStatus.start_time} - ${scheduleStatus.end_time} (${scheduleStatus.timezone}) • Click to edit`}
+          >
+            {scheduleStatus.in_window ? <Moon size={14} /> : <Calendar size={14} />}
+            <span>{scheduleStatus.message}</span>
+          </Link>
+        )}
         
         <div className={styles.toggleGroup}>
           <button 

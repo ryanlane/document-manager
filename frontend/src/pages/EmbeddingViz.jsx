@@ -1,18 +1,18 @@
-import { useState, useEffect, lazy, Suspense, memo } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Loader, Layers, User, FileText, Palette, Settings, Database, FileStack, BarChart3, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { 
+  ScatterChart, 
+  Scatter, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Cell 
+} from 'recharts'
 import styles from './EmbeddingViz.module.css'
-
-// Lazy load the heavy chart components
-const ScatterChart = lazy(() => import('recharts').then(m => ({ default: m.ScatterChart })))
-const Scatter = lazy(() => import('recharts').then(m => ({ default: m.Scatter })))
-const XAxis = lazy(() => import('recharts').then(m => ({ default: m.XAxis })))
-const YAxis = lazy(() => import('recharts').then(m => ({ default: m.YAxis })))
-const CartesianGrid = lazy(() => import('recharts').then(m => ({ default: m.CartesianGrid })))
-const Tooltip = lazy(() => import('recharts').then(m => ({ default: m.Tooltip })))
-const ResponsiveContainer = lazy(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })))
-const Cell = lazy(() => import('recharts').then(m => ({ default: m.Cell })))
 
 // Color palettes for different groupings
 const CATEGORY_COLORS = [
@@ -162,7 +162,8 @@ function EmbeddingViz() {
     }
   }
 
-  const CustomTooltip = ({ active, payload }) => {
+  // Memoized tooltip to prevent re-render loops
+  const CustomTooltip = useCallback(({ active, payload }) => {
     if (active && payload && payload.length > 0) {
       const point = payload[0].payload
       return (
@@ -195,15 +196,7 @@ function EmbeddingViz() {
       )
     }
     return null
-  }
-
-  // Chart loading fallback
-  const ChartFallback = () => (
-    <div className={styles.chartLoading}>
-      <Loader size={32} className={styles.spinner} />
-      <p>Loading chart components...</p>
-    </div>
-  )
+  }, [source])
 
   return (
     <div className={styles.container}>
@@ -419,7 +412,7 @@ function EmbeddingViz() {
           <p className={styles.loadingHint}>This may take 10-30 seconds for large datasets</p>
         </div>
       ) : points.length > 0 ? (
-        <Suspense fallback={<ChartFallback />}>
+        <>
           <div className={styles.vizContainer}>
             <ResponsiveContainer width="100%" height={600}>
               <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
@@ -438,7 +431,7 @@ function EmbeddingViz() {
                   stroke="#888"
                   tick={{ fill: '#888' }}
                 />
-                <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                <Tooltip content={CustomTooltip} cursor={{ strokeDasharray: '3 3' }} />
                 <Scatter 
                   data={points} 
                   fill="#646cff"
@@ -496,7 +489,7 @@ function EmbeddingViz() {
               </ul>
             </div>
           </div>
-        </Suspense>
+        </>
       ) : null}
     </div>
   )

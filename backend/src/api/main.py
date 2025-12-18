@@ -399,6 +399,119 @@ def get_worker_state_endpoint():
     """Get current worker process states."""
     return get_worker_state()
 
+@app.get("/worker/schedule-status")
+def get_worker_schedule_status(db: Session = Depends(get_db)):
+    """Get current worker schedule status for dashboard display."""
+    from datetime import datetime
+    import pytz
+    
+    # Get schedule settings
+    enabled_str = get_setting(db, "worker_schedule_enabled")
+    enabled = enabled_str == "true" if enabled_str else False
+    
+    if not enabled:
+        return {
+            "enabled": False,
+            "in_window": True,
+            "message": None,
+            "paused_services": []
+        }
+    
+    schedule_str = get_setting(db, "worker_default_schedule")
+    if not schedule_str:
+        return {
+            "enabled": True,
+            "in_window": True,
+            "message": "No schedule configured",
+            "paused_services": []
+        }
+    
+    try:
+        schedule = json.loads(schedule_str) if isinstance(schedule_str, str) else schedule_str
+    except:
+        return {
+            "enabled": True,
+            "in_window": True,
+            "message": "Invalid schedule configuration",
+            "paused_services": []
+        }
+    
+    # Get current time in schedule timezone
+    tz_name = schedule.get("timezone", "UTC")
+    try:
+        tz = pytz.timezone(tz_name)
+    except:
+        tz = pytz.UTC
+    
+    now = datetime.now(tz)
+    current_day = now.weekday()  # 0=Monday
+    current_time = now.strftime("%H:%M")
+    
+    # Check if today is an active day
+    active_days = schedule.get("days", [0, 1, 2, 3, 4, 5, 6])
+    start_time = schedule.get("start_time", "22:00")
+    end_time = schedule.get("end_time", "08:00")
+    next_day = schedule.get("next_day", end_time <= start_time)
+    
+    # Determine if we're in the active window
+    in_window = False
+    
+    if next_day:
+        # Overnight schedule (e.g., 22:00 -> 08:00)
+        if current_time >= start_time:
+            # After start time - check if today is an active day
+            in_window = current_day in active_days
+        elif current_time < end_time:
+            # Before end time - check if yesterday was an active day
+            yesterday = (current_day - 1) % 7
+            in_window = yesterday in active_days
+    else:
+        # Same-day schedule (e.g., 09:00 -> 17:00)
+        if current_day in active_days and start_time <= current_time < end_time:
+            in_window = True
+    
+    # Build message for dashboard
+    if in_window:
+        message = f"Active until {end_time}"
+        if next_day:
+            message += " tomorrow"
+    else:
+        # Find next active window
+        next_start_day = None
+        for i in range(7):
+            check_day = (current_day + i) % 7
+            if check_day in active_days:
+                if i == 0 and current_time < start_time:
+                    next_start_day = "today"
+                    break
+                elif i == 1:
+                    next_start_day = "tomorrow"
+                    break
+                else:
+                    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                    next_start_day = day_names[check_day]
+                    break
+        
+        if next_start_day:
+            message = f"Paused • Resumes {start_time} {next_start_day}"
+        else:
+            message = "Paused • No active days configured"
+    
+    # List which services are affected when paused
+    paused_services = []
+    if not in_window:
+        paused_services = ["enrich_docs", "embed_docs", "enrich", "embed"]
+    
+    return {
+        "enabled": True,
+        "in_window": in_window,
+        "message": message,
+        "start_time": start_time,
+        "end_time": end_time,
+        "timezone": tz_name,
+        "paused_services": paused_services
+    }
+
 @app.post("/worker/state")
 def update_worker_state(update: WorkerStateUpdate):
     """Update worker process states."""
