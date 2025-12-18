@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { 
   Server, 
   Cloud, 
@@ -24,11 +25,10 @@ const API_BASE = '/api'
 export default function WorkersTab({ 
   providers, 
   loadingProviders, 
-  onRefresh,
-  testingProvider,
-  setTestingProvider
+  onRefresh
 }) {
-  const [showAddWizard, setShowAddWizard] = React.useState(false)
+  const [showAddWizard, setShowAddWizard] = useState(false)
+  const [testingProvider, setTestingProvider] = useState(null)
 
   const toggleProvider = async (id, enabled) => {
     try {
@@ -279,6 +279,3 @@ export default function WorkersTab({
     </div>
   )
 }
-
-// Need React for useState
-import React from 'react'
