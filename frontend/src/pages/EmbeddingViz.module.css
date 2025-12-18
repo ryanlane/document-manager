@@ -356,3 +356,138 @@
     justify-content: center;
   }
 }
+
+/* Stats section - loads first */
+.statsSection {
+  margin-bottom: 1.5rem;
+}
+
+.statsLoading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(100, 108, 255, 0.05);
+  border-radius: 8px;
+  color: #888;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.statCard {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: rgba(100, 108, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(100, 108, 255, 0.1);
+}
+
+.statCard svg {
+  color: #646cff;
+  flex-shrink: 0;
+}
+
+.statInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+/* Prompt container before generating */
+.promptContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  padding: 2rem;
+}
+
+.promptCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+  padding: 3rem;
+  background: rgba(100, 108, 255, 0.05);
+  border-radius: 16px;
+  border: 1px dashed rgba(100, 108, 255, 0.3);
+  max-width: 500px;
+}
+
+.promptCard svg {
+  color: #646cff;
+  opacity: 0.6;
+}
+
+.promptCard h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.promptCard p {
+  margin: 0;
+  color: #888;
+  line-height: 1.6;
+}
+
+.promptHint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #f97316;
+  padding: 0.5rem 1rem;
+  background: rgba(249, 115, 22, 0.1);
+  border-radius: 6px;
+}
+
+.generateBtnLarge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 2rem;
+  background: #646cff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 1rem;
+}
+
+.generateBtnLarge:hover {
+  background: #5558e3;
+  transform: translateY(-1px);
+}
+
+/* Chart loading state */
+.chartLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  height: 400px;
+  color: #888;
+}

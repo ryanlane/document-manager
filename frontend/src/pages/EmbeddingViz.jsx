@@ -1,9 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { ArrowLeft, RefreshCw, Loader, Layers, User, FileText, Palette, Settings, Database, FileStack } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Loader, Layers, User, FileText, Palette, Settings, Database, FileStack, BarChart3, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import styles from './EmbeddingViz.module.css'
+
+// Lazy load the heavy chart components
+const ScatterChart = lazy(() => import('recharts').then(m => ({ default: m.ScatterChart })))
+const Scatter = lazy(() => import('recharts').then(m => ({ default: m.Scatter })))
+const XAxis = lazy(() => import('recharts').then(m => ({ default: m.XAxis })))
+const YAxis = lazy(() => import('recharts').then(m => ({ default: m.YAxis })))
+const CartesianGrid = lazy(() => import('recharts').then(m => ({ default: m.CartesianGrid })))
+const Tooltip = lazy(() => import('recharts').then(m => ({ default: m.Tooltip })))
+const ResponsiveContainer = lazy(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })))
+const Cell = lazy(() => import('recharts').then(m => ({ default: m.Cell })))
 
 // Color palettes for different groupings
 const CATEGORY_COLORS = [
@@ -31,6 +40,8 @@ const FILE_TYPE_COLORS = {
 function EmbeddingViz() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [stats, setStats] = useState(null)
   const [points, setPoints] = useState([])
   const [dimensions, setDimensions] = useState(2)
   const [algorithm, setAlgorithm] = useState('tsne')
@@ -43,6 +54,22 @@ function EmbeddingViz() {
   const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [hoveredPoint, setHoveredPoint] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [autoLoad, setAutoLoad] = useState(false)
+
+  // Fetch quick stats first (fast endpoint)
+  const fetchStats = async () => {
+    setStatsLoading(true)
+    try {
+      const res = await fetch('/api/embeddings/stats')
+      if (res.ok) {
+        const data = await res.json()
+        setStats(data)
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+    setStatsLoading(false)
+  }
 
   const fetchVisualization = async () => {
     setIsGenerating(true)
@@ -82,9 +109,17 @@ function EmbeddingViz() {
     setIsGenerating(false)
   }
 
+  // Load stats immediately on mount
   useEffect(() => {
-    fetchVisualization()
+    fetchStats()
   }, [])
+
+  // Don't auto-load heavy visualization - let user click Generate
+  useEffect(() => {
+    if (autoLoad) {
+      fetchVisualization()
+    }
+  }, [autoLoad])
 
   const getColorForPoint = (point) => {
     if (colorBy === 'category') {
@@ -162,6 +197,14 @@ function EmbeddingViz() {
     return null
   }
 
+  // Chart loading fallback
+  const ChartFallback = () => (
+    <div className={styles.chartLoading}>
+      <Loader size={32} className={styles.spinner} />
+      <p>Loading chart components...</p>
+    </div>
+  )
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -173,6 +216,47 @@ function EmbeddingViz() {
         <p className={styles.subtitle}>
           Explore how your documents are organized in semantic vector space
         </p>
+      </div>
+
+      {/* Quick Stats Section - loads first */}
+      <div className={styles.statsSection}>
+        {statsLoading ? (
+          <div className={styles.statsLoading}>
+            <Loader size={20} className={styles.spinner} />
+            <span>Loading embedding stats...</span>
+          </div>
+        ) : stats ? (
+          <div className={styles.statsGrid}>
+            <div className={styles.statCard}>
+              <BarChart3 size={24} />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{stats.total_docs?.toLocaleString() || 0}</span>
+                <span className={styles.statLabel}>Documents with Embeddings</span>
+              </div>
+            </div>
+            <div className={styles.statCard}>
+              <FileText size={24} />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{stats.total_entries?.toLocaleString() || 0}</span>
+                <span className={styles.statLabel}>Chunks with Embeddings</span>
+              </div>
+            </div>
+            <div className={styles.statCard}>
+              <Layers size={24} />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{stats.embedding_dim || '—'}</span>
+                <span className={styles.statLabel}>Embedding Dimensions</span>
+              </div>
+            </div>
+            <div className={styles.statCard}>
+              <Zap size={24} />
+              <div className={styles.statInfo}>
+                <span className={styles.statValue}>{stats.model || 'Unknown'}</span>
+                <span className={styles.statLabel}>Embedding Model</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className={styles.controls}>
@@ -291,6 +375,11 @@ function EmbeddingViz() {
               <Loader size={16} className={styles.spinner} />
               Generating...
             </>
+          ) : points.length === 0 ? (
+            <>
+              <BarChart3 size={16} />
+              Generate Visualization
+            </>
           ) : (
             <>
               <RefreshCw size={16} />
@@ -300,19 +389,37 @@ function EmbeddingViz() {
         </button>
       </div>
 
-      {loading ? (
+      {/* Show prompt to generate if not yet loaded */}
+      {!isGenerating && !loading && points.length === 0 ? (
+        <div className={styles.promptContainer}>
+          <div className={styles.promptCard}>
+            <BarChart3 size={64} strokeWidth={1} />
+            <h3>Ready to Visualize</h3>
+            <p>
+              Click "Generate Visualization" to create a {dimensions}D scatter plot of your 
+              {source === 'docs' ? ' documents' : ' chunks'} using {algorithm.toUpperCase()}.
+            </p>
+            <p className={styles.promptHint}>
+              <Zap size={14} />
+              This computation may take 10-30 seconds for large datasets
+            </p>
+            <button 
+              className={styles.generateBtnLarge}
+              onClick={fetchVisualization}
+            >
+              <BarChart3 size={20} />
+              Generate Visualization
+            </button>
+          </div>
+        </div>
+      ) : isGenerating ? (
         <div className={styles.loadingContainer}>
           <Loader size={48} className={styles.spinner} />
           <p>Generating {dimensions}D {source === 'docs' ? 'document' : 'chunk'} visualization using {algorithm.toUpperCase()}...</p>
           <p className={styles.loadingHint}>This may take 10-30 seconds for large datasets</p>
         </div>
-      ) : points.length === 0 ? (
-        <div className={styles.emptyState}>
-          <FileText size={48} />
-          <p>No embedded {source === 'docs' ? 'documents' : 'entries'} found</p>
-        </div>
-      ) : (
-        <>
+      ) : points.length > 0 ? (
+        <Suspense fallback={<ChartFallback />}>
           <div className={styles.vizContainer}>
             <ResponsiveContainer width="100%" height={600}>
               <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
@@ -389,8 +496,8 @@ function EmbeddingViz() {
               </ul>
             </div>
           </div>
-        </>
-      )}
+        </Suspense>
+      ) : null}
     </div>
   )
 }

@@ -12,15 +12,20 @@
   background: transparent;
   border: none;
   border-radius: 50%;
-  color: var(--text-secondary, #888);
+  color: var(--color-text-muted, #888);
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
 }
 
+.bellButton svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 .bellButton:hover {
-  background: var(--bg-hover, rgba(255,255,255,0.1));
-  color: var(--text-primary, #fff);
+  background: var(--color-bg-hover, rgba(255,255,255,0.1));
+  color: var(--color-text, #fff);
 }
 
 .badge {

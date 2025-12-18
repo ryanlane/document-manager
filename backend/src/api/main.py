@@ -3393,6 +3393,49 @@ def get_embedding_viz(entry_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/embeddings/stats")
+def get_embedding_stats(db: Session = Depends(get_db)):
+    """Get quick stats about embeddings - fast endpoint for page load."""
+    try:
+        # Count docs with embeddings
+        doc_count = db.execute(text("""
+            SELECT COUNT(*) FROM raw_files 
+            WHERE doc_embedding IS NOT NULL
+        """)).scalar() or 0
+        
+        # Count entries with embeddings
+        entry_count = db.execute(text("""
+            SELECT COUNT(*) FROM entries 
+            WHERE embedding IS NOT NULL
+        """)).scalar() or 0
+        
+        # Get embedding dimension from first available entry
+        dim_result = db.execute(text("""
+            SELECT vector_dims(embedding) FROM entries 
+            WHERE embedding IS NOT NULL LIMIT 1
+        """)).fetchone()
+        embedding_dim = dim_result[0] if dim_result else None
+        
+        # Get embedding model from settings
+        llm_settings = get_setting(db, "llm") or {}
+        embed_model = llm_settings.get("ollama", {}).get("embed_model", "nomic-embed-text")
+        
+        return {
+            "total_docs": doc_count,
+            "total_entries": entry_count,
+            "embedding_dim": embedding_dim,
+            "model": embed_model
+        }
+    except Exception as e:
+        return {
+            "total_docs": 0,
+            "total_entries": 0,
+            "embedding_dim": None,
+            "model": "Unknown",
+            "error": str(e)
+        }
+
+
 @app.get("/embeddings/visualize")
 def visualize_embeddings(
     dimensions: int = 2,

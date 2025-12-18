@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react'
 
 // Notification context for app-wide access
 const NotificationContext = createContext(null)
+
+// Counter for unique IDs
+let notificationIdCounter = 0
 
 export function useNotifications() {
   const context = useContext(NotificationContext)
@@ -17,11 +20,17 @@ export function NotificationProvider({ children }) {
   const [toasts, setToasts] = useState([])
   const [lastProgress, setLastProgress] = useState(null)
   const [isPolling, setIsPolling] = useState(true)
+  
+  // Track which notifications have been shown to prevent duplicates
+  const shownNotificationsRef = useRef(new Set())
 
   // Add a notification
   const addNotification = useCallback((notification) => {
+    // Generate unique ID using timestamp + counter
+    const uniqueId = `${Date.now()}-${++notificationIdCounter}`
+    
     const newNotification = {
-      id: Date.now(),
+      id: uniqueId,
       timestamp: new Date().toISOString(),
       read: false,
       ...notification
@@ -33,7 +42,7 @@ export function NotificationProvider({ children }) {
     // Show toast for important notifications
     if (notification.showToast !== false) {
       const toast = {
-        id: newNotification.id,
+        id: uniqueId,
         ...notification
       }
       setToasts(prev => [...prev, toast])
@@ -44,7 +53,7 @@ export function NotificationProvider({ children }) {
       }, 5000)
     }
     
-    return newNotification.id
+    return uniqueId
   }, [])
 
   // Dismiss a toast
@@ -75,6 +84,8 @@ export function NotificationProvider({ children }) {
   // Poll for processing milestones
   useEffect(() => {
     if (!isPolling) return
+    
+    const shownNotifications = shownNotificationsRef.current
 
     const checkMilestones = async () => {
       try {
@@ -89,32 +100,50 @@ export function NotificationProvider({ children }) {
           return
         }
 
-        // Check for processing started
+        // Check for processing started (only once per session)
         if (!lastProgress.any_active && progress.any_active) {
-          addNotification({
-            type: 'info',
-            title: 'Processing Started',
-            message: 'Document processing has begun.',
-            icon: 'play'
-          })
+          const key = `started-${Date.now()}`
+          if (!shownNotifications.has('processing-started')) {
+            shownNotifications.add('processing-started')
+            addNotification({
+              type: 'info',
+              title: 'Processing Started',
+              message: 'Document processing has begun.',
+              icon: 'play'
+            })
+          }
         }
 
-        // Check for processing completed
+        // Reset the "started" flag when processing stops, so next start can show again
+        if (lastProgress.any_active && !progress.any_active) {
+          shownNotifications.delete('processing-started')
+        }
+
+        // Check for processing completed (only once per completion)
         if (lastProgress.any_active && !progress.any_active && progress.overall_progress === 100) {
-          addNotification({
-            type: 'success',
-            title: 'Processing Complete',
-            message: 'All documents have been processed.',
-            icon: 'check-circle'
-          })
+          const completionKey = 'completed'
+          if (!shownNotifications.has(completionKey)) {
+            shownNotifications.add(completionKey)
+            addNotification({
+              type: 'success',
+              title: 'Processing Complete',
+              message: 'All documents have been processed.',
+              icon: 'check-circle'
+            })
+            // Reset completion flag after some time so it can trigger again on new processing
+            setTimeout(() => shownNotifications.delete(completionKey), 60000)
+          }
         }
 
-        // Check for milestone progress (25%, 50%, 75%)
+        // Check for milestone progress (25%, 50%, 75%) - only once per milestone
         const milestones = [25, 50, 75]
         for (const milestone of milestones) {
+          const milestoneKey = `milestone-${milestone}`
           const wasBelow = (lastProgress.overall_progress || 0) < milestone
           const isAtOrAbove = (progress.overall_progress || 0) >= milestone
-          if (wasBelow && isAtOrAbove && progress.any_active) {
+          
+          if (wasBelow && isAtOrAbove && progress.any_active && !shownNotifications.has(milestoneKey)) {
+            shownNotifications.add(milestoneKey)
             addNotification({
               type: 'info',
               title: `${milestone}% Complete`,
@@ -124,8 +153,14 @@ export function NotificationProvider({ children }) {
             })
           }
         }
+        
+        // Reset milestone flags when progress goes back to 0 (new processing run)
+        if (progress.overall_progress < 10 && (lastProgress.overall_progress || 0) >= 10) {
+          milestones.forEach(m => shownNotifications.delete(`milestone-${m}`))
+          shownNotifications.delete('completed')
+        }
 
-        // Check for high error rate
+        // Check for high error rate (throttled - only once per 10 errors)
         const totalErrors = Object.values(progress.phases || {}).reduce(
           (sum, p) => sum + (p.errors || 0), 0
         )
@@ -133,7 +168,10 @@ export function NotificationProvider({ children }) {
           (sum, p) => sum + (p.errors || 0), 0
         )
         
-        if (totalErrors > prevErrors + 10) {
+        const errorThreshold = Math.floor(totalErrors / 10) * 10
+        const errorKey = `errors-${errorThreshold}`
+        if (totalErrors > prevErrors + 10 && !shownNotifications.has(errorKey)) {
+          shownNotifications.add(errorKey)
           addNotification({
             type: 'error',
             title: 'Errors Detected',
