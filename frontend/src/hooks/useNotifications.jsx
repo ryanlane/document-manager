@@ -18,11 +18,20 @@ export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [toasts, setToasts] = useState([])
-  const [lastProgress, setLastProgress] = useState(null)
   const [isPolling, setIsPolling] = useState(true)
+  const [isVisible, setIsVisible] = useState(!document.hidden)
   
-  // Track which notifications have been shown to prevent duplicates
+  // Use refs for values that shouldn't trigger effect re-runs
+  const lastProgressRef = useRef(null)
   const shownNotificationsRef = useRef(new Set())
+  const toastTimeoutsRef = useRef(new Map())
+  
+  // Track page visibility to pause polling when tab is hidden
+  useEffect(() => {
+    const handleVisibility = () => setIsVisible(!document.hidden)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
 
   // Add a notification
   const addNotification = useCallback((notification) => {
@@ -47,10 +56,12 @@ export function NotificationProvider({ children }) {
       }
       setToasts(prev => [...prev, toast])
       
-      // Auto-dismiss toast after 5 seconds
-      setTimeout(() => {
+      // Auto-dismiss toast after 5 seconds - track timeout for cleanup
+      const timeoutId = setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== toast.id))
+        toastTimeoutsRef.current.delete(uniqueId)
       }, 5000)
+      toastTimeoutsRef.current.set(uniqueId, timeoutId)
     }
     
     return uniqueId
@@ -83,7 +94,7 @@ export function NotificationProvider({ children }) {
 
   // Poll for processing milestones
   useEffect(() => {
-    if (!isPolling) return
+    if (!isPolling || !isVisible) return
     
     const shownNotifications = shownNotificationsRef.current
 
@@ -93,10 +104,11 @@ export function NotificationProvider({ children }) {
         if (!res.ok) return
         
         const progress = await res.json()
+        const lastProgress = lastProgressRef.current
         
         // Skip if no previous data to compare
         if (!lastProgress) {
-          setLastProgress(progress)
+          lastProgressRef.current = progress
           return
         }
 
@@ -180,7 +192,7 @@ export function NotificationProvider({ children }) {
           })
         }
 
-        setLastProgress(progress)
+        lastProgressRef.current = progress
       } catch (err) {
         // Silently fail - don't spam notifications about polling errors
       }
@@ -190,8 +202,13 @@ export function NotificationProvider({ children }) {
     const interval = setInterval(checkMilestones, 10000)
     checkMilestones() // Initial check
 
-    return () => clearInterval(interval)
-  }, [isPolling, lastProgress, addNotification])
+    return () => {
+      clearInterval(interval)
+      // Clean up any pending toast timeouts
+      toastTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId))
+      toastTimeoutsRef.current.clear()
+    }
+  }, [isPolling, isVisible, addNotification])
 
   const value = {
     notifications,

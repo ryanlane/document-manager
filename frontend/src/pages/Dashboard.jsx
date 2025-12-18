@@ -102,16 +102,27 @@ function Dashboard() {
   // Toast notifications
   const [toasts, setToasts] = useState([])
   const prevWorkerProgress = React.useRef({})
+  const toastTimeoutsRef = React.useRef(new Map())
   
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [isVisible, setIsVisible] = useState(!document.hidden)
   
-  // Add toast notification
+  // Track page visibility to pause polling when tab is hidden
+  useEffect(() => {
+    const handleVisibility = () => setIsVisible(!document.hidden)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+  
+  // Add toast notification with cleanup tracking
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now()
     setToasts(prev => [...prev, { id, message, type }])
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
+      toastTimeoutsRef.current.delete(id)
     }, 4000)
+    toastTimeoutsRef.current.set(id, timeoutId)
   }, [])
 
   // Fast initial loads
@@ -294,17 +305,25 @@ function Dashboard() {
       fetchInheritanceStats()
     }, 100)
 
-    // Set up polling intervals
-    const countsInterval = setInterval(fetchCounts, 3000)
-    const docCountsInterval = setInterval(fetchDocCounts, 3000)
-    const stateInterval = setInterval(fetchWorkerState, 5000)
-    const progressInterval = setInterval(fetchWorkerProgress, 2000) // More frequent for responsive UI
-    const statsInterval = setInterval(fetchWorkerStats, 5000)
-    const storageInterval = setInterval(fetchStorage, 30000)
-    const inheritanceInterval = setInterval(fetchInheritanceStats, 10000)
-    
     return () => {
       clearTimeout(secondaryTimer)
+    }
+  }, []) // Only run once on mount
+  
+  // Separate effect for polling - respects visibility
+  useEffect(() => {
+    if (!isVisible) return // Don't poll when tab is hidden
+    
+    // Set up polling intervals with reduced frequency
+    const countsInterval = setInterval(fetchCounts, 5000) // Was 3000
+    const docCountsInterval = setInterval(fetchDocCounts, 5000) // Was 3000
+    const stateInterval = setInterval(fetchWorkerState, 5000)
+    const progressInterval = setInterval(fetchWorkerProgress, 3000) // Was 2000
+    const statsInterval = setInterval(fetchWorkerStats, 10000) // Was 5000
+    const storageInterval = setInterval(fetchStorage, 60000) // Was 30000
+    const inheritanceInterval = setInterval(fetchInheritanceStats, 30000) // Was 10000
+    
+    return () => {
       clearInterval(countsInterval)
       clearInterval(docCountsInterval)
       clearInterval(stateInterval)
@@ -312,8 +331,11 @@ function Dashboard() {
       clearInterval(statsInterval)
       clearInterval(storageInterval)
       clearInterval(inheritanceInterval)
+      // Clean up toast timeouts
+      toastTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId))
+      toastTimeoutsRef.current.clear()
     }
-  }, [fetchCounts, fetchDocCounts, fetchWorkerState, fetchWorkerProgress, fetchSystemStatus, fetchWorkerStats, fetchStorage, fetchExtensions, fetchRecent, fetchInheritanceStats])
+  }, [isVisible, fetchCounts, fetchDocCounts, fetchWorkerState, fetchWorkerProgress, fetchWorkerStats, fetchStorage, fetchInheritanceStats])
 
   const formatBytes = (bytes) => {
     if (!bytes) return '0 B'
