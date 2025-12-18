@@ -1,6 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { 
+  ArrowLeft, 
+  RefreshCw, 
+  Info, 
+  ChevronDown, 
+  ChevronUp,
+  FileText,
+  Calendar,
+  User,
+  Tag,
+  Folder,
+  HardDrive,
+  Hash,
+  Clock,
+  Layers,
+  Copy,
+  Check,
+  ExternalLink
+} from 'lucide-react'
 import DOMPurify from 'dompurify'
 import styles from './DocumentView.module.css'
 
@@ -8,9 +26,12 @@ function DocumentView() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [file, setFile] = useState(null)
+  const [metadata, setMetadata] = useState(null)
+  const [showMetadata, setShowMetadata] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reEnriching, setReEnriching] = useState(false)
+  const [copied, setCopied] = useState(null)
 
   useEffect(() => {
     fetch(`/api/files/${id}`)
@@ -28,6 +49,32 @@ function DocumentView() {
         setLoading(false)
       })
   }, [id])
+
+  const loadMetadata = async () => {
+    if (metadata) {
+      setShowMetadata(!showMetadata)
+      return
+    }
+    try {
+      const res = await fetch(`/api/files/${id}/metadata`)
+      if (res.ok) {
+        setMetadata(await res.json())
+        setShowMetadata(true)
+      }
+    } catch (err) {
+      console.error('Failed to load metadata:', err)
+    }
+  }
+
+  const copyToClipboard = async (text, field) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(field)
+      setTimeout(() => setCopied(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
 
   const handleReEnrich = async () => {
     setReEnriching(true)
@@ -114,16 +161,172 @@ function DocumentView() {
           <ArrowLeft size={20} /> Back
         </button>
         <h1>{file.filename}</h1>
-        <button 
-          onClick={handleReEnrich} 
-          disabled={reEnriching}
-          className={styles.reEnrichBtn}
-          title="Re-analyze this file with the LLM"
-        >
-          <RefreshCw size={16} className={reEnriching ? styles.spin : ''} />
-          {reEnriching ? 'Queuing...' : 'Re-enrich'}
-        </button>
+        <div className={styles.headerActions}>
+          <button 
+            onClick={loadMetadata}
+            className={`${styles.metadataBtn} ${showMetadata ? styles.active : ''}`}
+            title="Show file metadata"
+          >
+            <Info size={16} />
+            Metadata
+            {showMetadata ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          <button 
+            onClick={handleReEnrich} 
+            disabled={reEnriching}
+            className={styles.reEnrichBtn}
+            title="Re-analyze this file with the LLM"
+          >
+            <RefreshCw size={16} className={reEnriching ? styles.spin : ''} />
+            {reEnriching ? 'Queuing...' : 'Re-enrich'}
+          </button>
+        </div>
       </div>
+
+      {/* Metadata Panel */}
+      {showMetadata && metadata && (
+        <div className={styles.metadataPanel}>
+          {/* File Location */}
+          <div className={styles.metaSection}>
+            <h3><Folder size={16} /> File Location</h3>
+            <div className={styles.metaRow}>
+              <span className={styles.metaLabel}>Container Path:</span>
+              <code className={styles.metaValue}>{metadata.paths.container}</code>
+              <button 
+                onClick={() => copyToClipboard(metadata.paths.container, 'container')}
+                className={styles.copyBtn}
+                title="Copy path"
+              >
+                {copied === 'container' ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            </div>
+            {metadata.paths.host ? (
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Host Path:</span>
+                <code className={styles.metaValue}>{metadata.paths.host}</code>
+                <button 
+                  onClick={() => copyToClipboard(metadata.paths.host, 'host')}
+                  className={styles.copyBtn}
+                  title="Copy path"
+                >
+                  {copied === 'host' ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            ) : (
+              <div className={styles.metaNote}>
+                <ExternalLink size={14} />
+                <span>Configure host path mapping in Settings → Sources to see the original file location</span>
+              </div>
+            )}
+          </div>
+
+          {/* File Info */}
+          <div className={styles.metaSection}>
+            <h3><FileText size={16} /> File Info</h3>
+            <div className={styles.metaGrid}>
+              <div className={styles.metaItem}>
+                <HardDrive size={14} />
+                <span>{metadata.file_info.size_formatted}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <FileText size={14} />
+                <span>{metadata.file_info.file_type} ({metadata.file_info.extension})</span>
+              </div>
+              {metadata.file_info.modified && (
+                <div className={styles.metaItem}>
+                  <Calendar size={14} />
+                  <span>Modified: {new Date(metadata.file_info.modified).toLocaleDateString()}</span>
+                </div>
+              )}
+              <div className={styles.metaItem}>
+                <Layers size={14} />
+                <span>{metadata.processing.entry_count} chunk{metadata.processing.entry_count !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+            {metadata.file_info.sha256 && (
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>SHA256:</span>
+                <code className={styles.metaValueSmall}>{metadata.file_info.sha256}</code>
+                <button 
+                  onClick={() => copyToClipboard(metadata.file_info.sha256, 'sha256')}
+                  className={styles.copyBtn}
+                  title="Copy hash"
+                >
+                  {copied === 'sha256' ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Enrichment Data */}
+          {(metadata.enrichment.title || metadata.enrichment.author || metadata.enrichment.tags?.length > 0) && (
+            <div className={styles.metaSection}>
+              <h3><Tag size={16} /> Enrichment</h3>
+              {metadata.enrichment.title && (
+                <div className={styles.metaRow}>
+                  <span className={styles.metaLabel}>Title:</span>
+                  <span className={styles.metaValue}>{metadata.enrichment.title}</span>
+                </div>
+              )}
+              {metadata.enrichment.author && (
+                <div className={styles.metaRow}>
+                  <span className={styles.metaLabel}>Author:</span>
+                  <span className={styles.metaValue}>{metadata.enrichment.author}</span>
+                </div>
+              )}
+              {metadata.enrichment.category && (
+                <div className={styles.metaRow}>
+                  <span className={styles.metaLabel}>Category:</span>
+                  <span className={styles.metaValue}>{metadata.enrichment.category}</span>
+                </div>
+              )}
+              {metadata.enrichment.tags?.length > 0 && (
+                <div className={styles.metaTags}>
+                  {metadata.enrichment.tags.map((tag, i) => (
+                    <span key={i} className={styles.tag}>{tag}</span>
+                  ))}
+                </div>
+              )}
+              {metadata.enrichment.summary && (
+                <div className={styles.metaSummary}>
+                  <span className={styles.metaLabel}>Summary:</span>
+                  <p>{metadata.enrichment.summary}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Series Info */}
+          {metadata.series && (
+            <div className={styles.metaSection}>
+              <h3><Layers size={16} /> Series</h3>
+              <div className={styles.metaRow}>
+                <span className={styles.metaLabel}>Series:</span>
+                <span className={styles.metaValue}>
+                  {metadata.series.name} - Part {metadata.series.number}
+                  {metadata.series.total && ` of ${metadata.series.total}`}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Processing Status */}
+          <div className={styles.metaSection}>
+            <h3><Clock size={16} /> Processing</h3>
+            <div className={styles.metaGrid}>
+              <div className={styles.metaItem}>
+                <span className={`${styles.statusDot} ${metadata.processing.status === 'ok' ? styles.ok : styles.error}`} />
+                <span>File: {metadata.processing.status}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={`${styles.statusDot} ${metadata.processing.doc_status === 'embedded' ? styles.ok : styles.pending}`} />
+                <span>Doc: {metadata.processing.doc_status}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <article className={styles.content}>
         {isHtml ? (
           <div 

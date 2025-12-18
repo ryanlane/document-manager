@@ -65,7 +65,13 @@ DEFAULT_SETTINGS = {
     "extensions": [
         ".txt", ".md", ".html", ".pdf", ".docx",
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
-    ]
+    ],
+    # Host path mappings: container path -> host path
+    # Users configure this so they can locate original files on their system
+    "host_path_mappings": {
+        # Example: "/data/archive/docs": "C:\\Users\\Me\\Documents"
+        # Example: "/data/archive/photos": "/mnt/nas/photos"
+    }
 }
 
 

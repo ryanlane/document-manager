@@ -1243,6 +1243,42 @@ def update_sources_settings(update: SourcesUpdate, db: Session = Depends(get_db)
     raise HTTPException(status_code=500, detail="Failed to update sources")
 
 
+# Host Path Mappings
+class HostPathMapping(BaseModel):
+    container_path: str
+    host_path: str
+
+
+@app.get("/settings/host-path-mappings")
+def get_host_path_mappings(db: Session = Depends(get_db)):
+    """Get all host path mappings."""
+    mappings = get_setting(db, "host_path_mappings") or {}
+    return {"mappings": mappings}
+
+
+@app.post("/settings/host-path-mappings")
+def add_host_path_mapping(mapping: HostPathMapping, db: Session = Depends(get_db)):
+    """Add or update a host path mapping."""
+    ensure_settings_table(db)
+    mappings = get_setting(db, "host_path_mappings") or {}
+    mappings[mapping.container_path] = mapping.host_path
+    if set_setting(db, "host_path_mappings", mappings):
+        return {"message": f"Added mapping: {mapping.container_path} -> {mapping.host_path}"}
+    raise HTTPException(status_code=500, detail="Failed to add mapping")
+
+
+@app.delete("/settings/host-path-mappings")
+def remove_host_path_mapping(mapping: HostPathMapping, db: Session = Depends(get_db)):
+    """Remove a host path mapping."""
+    ensure_settings_table(db)
+    mappings = get_setting(db, "host_path_mappings") or {}
+    if mapping.container_path in mappings:
+        del mappings[mapping.container_path]
+        if set_setting(db, "host_path_mappings", mappings):
+            return {"message": f"Removed mapping for: {mapping.container_path}"}
+    raise HTTPException(status_code=404, detail="Mapping not found")
+
+
 class GenericSettingsUpdate(BaseModel):
     indexing_mode: Optional[str] = None
     setup_complete: Optional[bool] = None
@@ -2117,6 +2153,106 @@ def get_file_details(file_id: int, db: Session = Depends(get_db)):
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
     return file
+
+
+@app.get("/files/{file_id}/metadata")
+def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
+    """
+    Get comprehensive metadata for a file, including:
+    - File info (path, size, dates, hash)
+    - Processing status
+    - Enrichment data (title, author, tags, summary)
+    - Host path (if mapping is configured)
+    - Related entries count
+    - Series info
+    """
+    from src.db.models import Entry
+    
+    file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Get host path mapping
+    host_path_mappings = get_setting(db, "host_path_mappings") or {}
+    host_path = None
+    container_path = file.path
+    
+    # Find the longest matching prefix
+    best_match = ""
+    for container_prefix, host_prefix in host_path_mappings.items():
+        if container_path.startswith(container_prefix) and len(container_prefix) > len(best_match):
+            best_match = container_prefix
+            # Replace container prefix with host prefix
+            relative_path = container_path[len(container_prefix):]
+            # Handle path separator differences (container is always Linux-style)
+            if '\\' in host_prefix:
+                # Windows host path
+                relative_path = relative_path.replace('/', '\\')
+            host_path = host_prefix + relative_path
+    
+    # Get entry count
+    entry_count = db.query(Entry).filter(Entry.file_id == file_id).count()
+    
+    # Get first entry for enrichment data if available
+    first_entry = db.query(Entry).filter(Entry.file_id == file_id).order_by(Entry.entry_index).first()
+    
+    # Format file size
+    def format_size(bytes):
+        if not bytes:
+            return "Unknown"
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes < 1024:
+                return f"{bytes:.1f} {unit}"
+            bytes /= 1024
+        return f"{bytes:.1f} TB"
+    
+    return {
+        "id": file.id,
+        "filename": file.filename,
+        "paths": {
+            "container": file.path,
+            "host": host_path,
+            "host_mapping_configured": bool(host_path)
+        },
+        "file_info": {
+            "extension": file.extension,
+            "file_type": file.file_type,
+            "size_bytes": file.size_bytes,
+            "size_formatted": format_size(file.size_bytes),
+            "sha256": file.sha256,
+            "modified": file.mtime.isoformat() if file.mtime else None,
+            "created": file.created_at.isoformat() if file.created_at else None,
+            "updated": file.updated_at.isoformat() if file.updated_at else None,
+        },
+        "processing": {
+            "status": file.status,
+            "doc_status": file.doc_status,
+            "entry_count": entry_count,
+        },
+        "enrichment": {
+            "title": first_entry.title if first_entry else None,
+            "author": first_entry.author if first_entry else None,
+            "category": first_entry.category if first_entry else None,
+            "tags": first_entry.tags if first_entry else [],
+            "summary": first_entry.summary if first_entry else file.doc_summary,
+        },
+        "series": {
+            "name": file.series_name,
+            "number": file.series_number,
+            "total": file.series_total,
+        } if file.series_name else None,
+        "image_info": {
+            "width": file.image_width,
+            "height": file.image_height,
+            "thumbnail_path": file.thumbnail_path,
+            "ocr_text": file.ocr_text[:500] + "..." if file.ocr_text and len(file.ocr_text) > 500 else file.ocr_text,
+            "vision_description": file.vision_description,
+            "vision_model": file.vision_model,
+        } if file.file_type == 'image' else None,
+        "source": file.source,
+        "author_key": file.author_key,
+        "meta_json": file.meta_json,
+    }
 
 
 # ==================== Image Gallery Endpoints ====================

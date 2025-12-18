@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   FolderPlus, 
   Check, 
   X, 
   Trash2,
-  Plus
+  Plus,
+  ExternalLink,
+  ArrowRight
 } from 'lucide-react'
 import styles from '../Settings.module.css'
 
@@ -16,6 +18,57 @@ export default function SourcesTab({
   onRefresh 
 }) {
   const [newExclude, setNewExclude] = useState('')
+  const [hostMappings, setHostMappings] = useState({})
+  const [newMapping, setNewMapping] = useState({ container: '', host: '' })
+
+  useEffect(() => {
+    loadHostMappings()
+  }, [])
+
+  const loadHostMappings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/settings/host-path-mappings`)
+      if (res.ok) {
+        const data = await res.json()
+        setHostMappings(data.mappings || {})
+      }
+    } catch (err) {
+      console.error('Failed to load host path mappings:', err)
+    }
+  }
+
+  const addHostMapping = async () => {
+    if (!newMapping.container || !newMapping.host) return
+    try {
+      const res = await fetch(`${API_BASE}/settings/host-path-mappings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          container_path: newMapping.container, 
+          host_path: newMapping.host 
+        })
+      })
+      if (res.ok) {
+        setNewMapping({ container: '', host: '' })
+        loadHostMappings()
+      }
+    } catch (err) {
+      alert('Failed to add mapping')
+    }
+  }
+
+  const removeHostMapping = async (containerPath) => {
+    try {
+      await fetch(`${API_BASE}/settings/host-path-mappings`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ container_path: containerPath, host_path: '' })
+      })
+      loadHostMappings()
+    } catch (err) {
+      alert('Failed to remove mapping')
+    }
+  }
 
   const addSourceFolder = async (path) => {
     try {
@@ -202,6 +255,57 @@ export default function SourcesTab({
             onKeyDown={(e) => e.key === 'Enter' && addExcludePattern()}
           />
           <button onClick={addExcludePattern}><Plus size={16} /></button>
+        </div>
+      </div>
+
+      {/* Host Path Mappings */}
+      <div className={styles.hostMappingsSection}>
+        <h4><ExternalLink size={16} /> Host Path Mappings</h4>
+        <p className={styles.description}>
+          Map container paths to your actual file system paths. This helps you locate original files when viewing document metadata.
+        </p>
+        
+        {Object.keys(hostMappings).length > 0 ? (
+          <div className={styles.mappingsList}>
+            {Object.entries(hostMappings).map(([containerPath, hostPath]) => (
+              <div key={containerPath} className={styles.mappingItem}>
+                <code className={styles.mappingPath}>{containerPath}</code>
+                <ArrowRight size={14} className={styles.mappingArrow} />
+                <code className={styles.mappingPath}>{hostPath}</code>
+                <button 
+                  onClick={() => removeHostMapping(containerPath)} 
+                  className={styles.removeMappingBtn}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.noMappings}>
+            No mappings configured. Add mappings to see original file paths in document metadata.
+          </p>
+        )}
+        
+        <div className={styles.addMapping}>
+          <input
+            type="text"
+            value={newMapping.container}
+            onChange={(e) => setNewMapping(prev => ({ ...prev, container: e.target.value }))}
+            placeholder="/data/archive/docs"
+            className={styles.mappingInput}
+          />
+          <ArrowRight size={14} className={styles.mappingArrow} />
+          <input
+            type="text"
+            value={newMapping.host}
+            onChange={(e) => setNewMapping(prev => ({ ...prev, host: e.target.value }))}
+            placeholder="C:\Users\Me\Documents"
+            className={styles.mappingInput}
+          />
+          <button onClick={addHostMapping} disabled={!newMapping.container || !newMapping.host}>
+            <Plus size={16} />
+          </button>
         </div>
       </div>
     </div>
