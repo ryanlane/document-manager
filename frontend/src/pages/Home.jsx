@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Search, BookOpen, FileText, Server, Info, Zap, Type, Layers, Target } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, BookOpen, FileText, Server, Info, Zap, Type, Layers, Target, WifiOff, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useConnectionStatus } from '../hooks/useConnectionStatus'
 import styles from './Home.module.css'
 
 function Home() {
@@ -8,6 +9,8 @@ function Home() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState(null)
+  const [statusLoading, setStatusLoading] = useState(true)
+  const [statusError, setStatusError] = useState(null)
   const [selectedModel, setSelectedModel] = useState(localStorage.getItem('archive_brain_model') || '')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showExplainer, setShowExplainer] = useState(false)
@@ -20,20 +23,47 @@ function Home() {
     category: ''
   })
   const navigate = useNavigate()
+  const { isConnected, retry: retryConnection } = useConnectionStatus()
+
+  // Fetch status with retry capability
+  const fetchStatus = useCallback(async () => {
+    setStatusLoading(true)
+    setStatusError(null)
+    
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      
+      const res = await fetch('/api/system/status', { signal: controller.signal })
+      clearTimeout(timeoutId)
+      
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      
+      const data = await res.json()
+      setStatus(data)
+      if (data.ollama && data.ollama.chat_model) {
+        if (!localStorage.getItem('archive_brain_model')) {
+          setSelectedModel(data.ollama.chat_model)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch status", err)
+      setStatusError(err.message || 'Failed to connect')
+    } finally {
+      setStatusLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    fetch('/api/system/status')
-      .then(res => res.json())
-      .then(data => {
-        setStatus(data)
-        if (data.ollama && data.ollama.chat_model) {
-          if (!localStorage.getItem('archive_brain_model')) {
-            setSelectedModel(data.ollama.chat_model)
-          }
-        }
-      })
-      .catch(err => console.error("Failed to fetch status", err))
-  }, [])
+    fetchStatus()
+  }, [fetchStatus])
+
+  // Retry status fetch when connection is restored
+  useEffect(() => {
+    if (isConnected && statusError) {
+      fetchStatus()
+    }
+  }, [isConnected, statusError, fetchStatus])
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -155,6 +185,22 @@ function Home() {
         <BookOpen />
         Archive Brain
       </h1>
+      
+      {/* Connection error banner */}
+      {statusError && (
+        <div className={styles.connectionError}>
+          <WifiOff size={18} />
+          <span>Unable to connect to backend</span>
+          <button 
+            onClick={() => { fetchStatus(); retryConnection(); }}
+            className={styles.retryBtn}
+            disabled={statusLoading}
+          >
+            <RefreshCw size={14} className={statusLoading ? styles.spinning : ''} />
+            {statusLoading ? 'Connecting...' : 'Retry'}
+          </button>
+        </div>
+      )}
       
       <form className={styles.searchForm} onSubmit={handleSearch}>
         <textarea

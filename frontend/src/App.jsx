@@ -1,8 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import Navbar from './components/Navbar'
+import ErrorBoundary from './components/ErrorBoundary'
 import { ToastContainer } from './components/Notifications'
 import { NotificationProvider } from './hooks/useNotifications'
+import { ConnectionProvider } from './hooks/useConnectionStatus'
 import Home from './pages/Home'
 import DocumentView from './pages/DocumentView'
 import Browse from './pages/Browse'
@@ -59,32 +61,36 @@ function FirstRunRedirect({ children }) {
 
 function App() {
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <NotificationProvider>
-        <FirstRunRedirect>
-          <Navbar />
-          <div style={{ paddingTop: '60px' }}>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/setup" element={<Setup />} />
-              <Route path="/browse" element={<Browse />} />
-              <Route path="/files" element={<Navigate to="/browse?tab=files" replace />} />
-              <Route path="/gallery" element={<Navigate to="/browse?tab=images" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/logs" element={<Logs />} />
-              <Route path="/how-it-works" element={<HowItWorks />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/document/:id" element={<DocumentView />} />
-              <Route path="/resolve" element={<ResolveLink />} />
-              <Route path="/entry" element={<EntryInspector />} />
-              <Route path="/entry/:entryId" element={<EntryInspector />} />
-              <Route path="/embeddings" element={<EmbeddingViz />} />
-            </Routes>
-          </div>
-        </FirstRunRedirect>
-        <ToastContainer />
-      </NotificationProvider>
-    </Router>
+    <ErrorBoundary>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ConnectionProvider>
+          <NotificationProvider>
+            <FirstRunRedirect>
+              <Navbar />
+              <div style={{ paddingTop: '60px' }}>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/setup" element={<Setup />} />
+                  <Route path="/browse" element={<Browse />} />
+                  <Route path="/files" element={<Navigate to="/browse?tab=files" replace />} />
+                  <Route path="/gallery" element={<Navigate to="/browse?tab=images" replace />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/logs" element={<Logs />} />
+                  <Route path="/how-it-works" element={<HowItWorks />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/document/:id" element={<DocumentView />} />
+                  <Route path="/resolve" element={<ResolveLink />} />
+                  <Route path="/entry" element={<EntryInspector />} />
+                  <Route path="/entry/:entryId" element={<EntryInspector />} />
+                  <Route path="/embeddings" element={<EmbeddingViz />} />
+                </Routes>
+              </div>
+            </FirstRunRedirect>
+            <ToastContainer />
+          </NotificationProvider>
+        </ConnectionProvider>
+      </Router>
+    </ErrorBoundary>
   )
 }
 
