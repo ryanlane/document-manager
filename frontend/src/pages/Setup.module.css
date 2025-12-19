@@ -196,6 +196,18 @@
   color: #60a5fa;
 }
 
+.infoBox > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.infoBoxHint {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #94a3b8);
+  margin: 0;
+}
+
 .warningBox {
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid rgba(245, 158, 11, 0.3);
@@ -844,4 +856,254 @@
   .providerCards {
     grid-template-columns: 1fr;
   }
+}
+
+/* Add Folders Section */
+.addFoldersSection {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin-bottom: 1rem;
+}
+
+.addFolderGuide {
+  background: var(--bg-secondary, #111);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.addFolderGuide > p {
+  color: var(--text-secondary, #888);
+  margin-bottom: 1.25rem;
+  line-height: 1.6;
+}
+
+.guideOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.guideOption {
+  background: var(--bg-tertiary, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.guideOptionHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.guideOptionHeader h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin: 0;
+}
+
+.guideOptionHeader svg {
+  color: var(--accent-color, #4ade80);
+}
+
+.guideOption > p {
+  color: var(--text-secondary, #888);
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.guideSteps {
+  color: var(--text-secondary, #888);
+  font-size: 0.9rem;
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+  line-height: 1.8;
+}
+
+.guideSteps li {
+  margin-bottom: 0.5rem;
+}
+
+.guideSteps code {
+  background: var(--bg-primary, #0a0a0a);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: var(--accent-color, #4ade80);
+}
+
+.codeBlock {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-primary, #0a0a0a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.codeBlock code {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 0.85rem;
+  color: var(--accent-color, #4ade80);
+  white-space: nowrap;
+  flex: 1;
+}
+
+.copyButton {
+  background: transparent;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 4px;
+  padding: 0.35rem;
+  cursor: pointer;
+  color: var(--text-secondary, #888);
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.copyButton:hover {
+  background: var(--border-color, #333);
+  color: var(--text-primary, #fff);
+}
+
+.guideHint {
+  color: var(--text-tertiary, #666);
+  font-size: 0.8rem;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+.guideExample {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.guideExample svg {
+  color: var(--accent-color, #4ade80);
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.guideExample div {
+  font-size: 0.9rem;
+  color: var(--text-secondary, #888);
+  line-height: 1.6;
+}
+
+.guideExample strong {
+  color: var(--text-primary, #fff);
+}
+
+.inlineCode {
+  display: block;
+  background: var(--bg-primary, #0a0a0a);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.8rem;
+  color: var(--accent-color, #4ade80);
+  word-break: break-all;
+}
+
+.refreshButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-tertiary, #1a1a1a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  color: var(--text-primary, #fff);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refreshButton:hover {
+  background: var(--border-color, #333);
+  border-color: var(--accent-color, #4ade80);
+}
+
+.refreshButton svg {
+  color: var(--accent-color, #4ade80);
+}
+
+/* Platform Examples */
+.platformExamples {
+  background: var(--bg-tertiary, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.platformExamples h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin: 0 0 1rem 0;
+}
+
+.platformExamples h4 svg {
+  color: var(--accent-color, #4ade80);
+}
+
+.platformExample {
+  margin-bottom: 1rem;
+}
+
+.platformExample:last-child {
+  margin-bottom: 0;
+}
+
+.platformLabel {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary, #aaa);
+  margin-bottom: 0.35rem;
+}
+
+.platformNote {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-tertiary, #666);
+  margin-top: 0.35rem;
+  font-style: italic;
+}
+
+.platformNote code {
+  background: var(--bg-primary, #0a0a0a);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-style: normal;
+  color: var(--accent-color, #4ade80);
 }

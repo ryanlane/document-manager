@@ -307,3 +307,8 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
+
+# Development environment archive (keep .gitkeep)
+archive_dev/*
+!archive_dev/.gitkeep
+docs/TURNKEY_PLAN.md

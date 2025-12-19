@@ -445,7 +445,44 @@ Could potentially modify docker-compose.yml from within container, but security 
 - `frontend/src/pages/Settings.jsx` (add guidance section)
 - `docs/ADDING_FOLDERS.md` (new user guide)
 
-### 3.2 Folder Browser Component
+### 3.2 Pre-Mounted Common Locations (Plex-Style)
+Reduce friction by pre-mounting common user directories in the default docker-compose.yml.
+
+**Rationale:**
+Plex and similar media servers face the same Docker volume limitation. Their solution: accept it as a Docker tradeoff and document it clearly. However, we can reduce first-run friction by pre-mounting locations where most users store documents.
+
+**Default mounts in docker-compose.yml:**
+```yaml
+volumes:
+  # Pre-mounted common locations - users just select which to index
+  - ~/Documents:/data/archive/documents
+  - ~/Downloads:/data/archive/downloads  
+  - /mnt:/data/archive/mnt  # Catches mounted drives, NAS, etc.
+```
+
+**Benefits:**
+- Most users never need to edit docker-compose.yml
+- Network drives mounted at `/mnt` are automatically available
+- Users just select folders in the UI - no terminal required
+- Power users can still add custom mounts
+
+**Platform considerations:**
+| Platform | Default Mounts |
+|----------|----------------|
+| Linux | `~/Documents`, `~/Downloads`, `/mnt` |
+| macOS | `~/Documents`, `~/Downloads`, `/Volumes` |
+| Windows (WSL) | `/mnt/c/Users/$USER/Documents`, `/mnt/c/Users/$USER/Downloads` |
+
+**Implementation:**
+- Update default docker-compose.yml with common mounts
+- Setup Wizard shows which pre-mounted folders are available
+- "Add More Folders" section only needed for non-standard locations
+
+**Files:**
+- `docker-compose.yml` (add default volume mounts)
+- `docs/ADDING_FOLDERS.md` (document the defaults)
+
+### 3.3 Folder Browser Component
 Let users browse available mounted folders visually.
 
 **Features:**

@@ -17,9 +17,12 @@ import {
   Layers,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react'
 import DOMPurify from 'dompurify'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import styles from './DocumentView.module.css'
 
 function DocumentView() {
@@ -93,7 +96,9 @@ function DocumentView() {
   if (error) return <div className={styles.error}>Error: {error}</div>
   if (!file) return <div className={styles.error}>File not found</div>
 
-  const isHtml = file.filename.toLowerCase().endsWith('.html')
+  const filename = file.filename.toLowerCase()
+  const isHtml = filename.endsWith('.html')
+  const isMarkdown = filename.endsWith('.md') || filename.endsWith('.markdown')
 
   const getProcessedHtml = (htmlContent) => {
     if (!htmlContent) return ''
@@ -162,6 +167,24 @@ function DocumentView() {
         </button>
         <h1>{file.filename}</h1>
         <div className={styles.headerActions}>
+          <a 
+            href={`/api/files/${id}/content`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.openSourceBtn}
+            title="Open original source file"
+          >
+            <ExternalLink size={16} />
+            Open Source
+          </a>
+          <a 
+            href={`/api/files/${id}/content`}
+            download
+            className={styles.downloadBtn}
+            title="Download original file"
+          >
+            <Download size={16} />
+          </a>
           <button 
             onClick={loadMetadata}
             className={`${styles.metadataBtn} ${showMetadata ? styles.active : ''}`}
@@ -333,6 +356,12 @@ function DocumentView() {
             className={styles.text}
             dangerouslySetInnerHTML={{ __html: getProcessedHtml(file.raw_text) }}
           />
+        ) : isMarkdown ? (
+          <div className={`${styles.text} ${styles.markdown}`}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {file.raw_text || ''}
+            </ReactMarkdown>
+          </div>
         ) : (
           <div className={styles.text}>
             {getProcessedText(file.raw_text)}

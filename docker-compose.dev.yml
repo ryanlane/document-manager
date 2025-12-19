@@ -1,0 +1,225 @@
+# Development Environment Overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev up -d
+#
+# This creates an isolated development environment with:
+# - Different ports (3001, 8001, 5433) to avoid conflicts with production
+# - Separate volumes (postgres_data_dev, ollama_models_dev, etc.)
+# - Mounts ./archive_dev instead of ./archive_root
+# - Can be fully reset without affecting production data
+
+services:
+  db:
+    profiles:
+      - prod
+    
+  db-dev:
+    image: pgvector/pgvector:pg16
+    profiles:
+      - dev
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-archive_brain_dev}
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - archive_net_dev
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  tika:
+    profiles:
+      - prod
+
+  tika-dev:
+    image: apache/tika:latest
+    profiles:
+      - dev
+    ports:
+      - "9999:9998"
+    networks:
+      - archive_net_dev
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  ollama:
+    profiles:
+      - prod
+
+  ollama-dev:
+    image: ollama/ollama:latest
+    profiles:
+      - dev
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama_models_dev:/root/.ollama
+    networks:
+      - archive_net_dev
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ollama-init:
+    profiles:
+      - prod
+
+  ollama-init-dev:
+    image: ollama/ollama:latest
+    profiles:
+      - dev
+    depends_on:
+      ollama-dev:
+        condition: service_healthy
+    networks:
+      - archive_net_dev
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Pulling required models for dev environment..."
+        ollama pull nomic-embed-text
+        ollama pull qwen2:1.5b
+        echo "Dev models ready!"
+    environment:
+      - OLLAMA_HOST=ollama-dev:11434
+    restart: "no"
+
+  worker:
+    profiles:
+      - prod
+
+  worker-dev:
+    build: ./backend
+    profiles:
+      - dev
+    volumes:
+      - ./backend:/app
+      - ./config:/app/config
+      - ./archive_dev:/data/archive
+      - /mnt/oak/knowledge:/data/archive/knowledge
+      - worker_shared_dev:/app/shared
+    environment:
+      - DB_HOST=db-dev
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-archive_brain_dev}
+      - TIKA_URL=http://tika-dev:9998
+      - OLLAMA_URL=http://ollama-dev:11434
+      - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+    depends_on:
+      ollama-dev:
+        condition: service_healthy
+      db-dev:
+        condition: service_started
+      tika-dev:
+        condition: service_started
+    command: python -m src.worker_loop
+    networks:
+      - archive_net_dev
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  api:
+    profiles:
+      - prod
+
+  api-dev:
+    build: ./backend
+    profiles:
+      - dev
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./backend:/app
+      - ./config:/app/config
+      - ./archive_dev:/data/archive
+      - /mnt/oak/knowledge:/data/archive/knowledge
+      - worker_shared_dev:/app/shared
+    environment:
+      - DB_HOST=db-dev
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-archive_brain_dev}
+      - OLLAMA_URL=http://ollama-dev:11434
+      - OLLAMA_MOCK=${OLLAMA_MOCK:-false}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+    depends_on:
+      ollama-dev:
+        condition: service_healthy
+      db-dev:
+        condition: service_started
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - archive_net_dev
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  frontend:
+    profiles:
+      - prod
+
+  frontend-dev:
+    build: ./frontend
+    profiles:
+      - dev
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_TARGET=http://api-dev:8000
+      - VITE_HMR_PORT=3001
+    depends_on:
+      - api-dev
+    networks:
+      - archive_net_dev
+
+volumes:
+  postgres_data_dev:
+  worker_shared_dev:
+  ollama_models_dev:
+
+networks:
+  archive_net_dev:

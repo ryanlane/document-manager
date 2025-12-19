@@ -13,12 +13,12 @@ export default defineConfig({
       interval: 1000
     },
     hmr: {
-      host: 'localhost',
-      port: 3000
+      // Use clientPort to handle port mapping (3001 -> 3000)
+      clientPort: process.env.VITE_HMR_PORT ? parseInt(process.env.VITE_HMR_PORT) : undefined
     },
     proxy: {
       '/api': {
-        target: 'http://api:8000',
+        target: process.env.VITE_API_TARGET || 'http://api:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
         timeout: 60000,

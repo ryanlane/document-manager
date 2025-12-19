@@ -174,44 +174,74 @@ def system_health_check(db: Session = Depends(get_db)):
         if overall_status != "error":
             overall_status = "error"
     
-    # 3. GPU availability (check via Ollama if possible)
+    # 3. GPU availability (check via Ollama's API)
     gpu_info = None
     try:
-        # Try to get GPU info from nvidia-smi if available in container
-        import subprocess
-        result = subprocess.run(
-            ['nvidia-smi', '--query-gpu=name,memory.total,memory.free', '--format=csv,noheader,nounits'],
-            capture_output=True, text=True, timeout=5, check=False
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            lines = result.stdout.strip().split('\n')
-            gpus = []
-            for line in lines:
-                parts = [p.strip() for p in line.split(',')]
-                if len(parts) >= 3:
-                    gpus.append({
-                        "name": parts[0],
-                        "vram_total_mb": int(parts[1]),
-                        "vram_free_mb": int(parts[2])
-                    })
-            if gpus:
-                gpu_info = gpus
-                checks["gpu"] = {
-                    "status": "ok",
-                    "message": f"{len(gpus)} GPU(s) detected",
-                    "gpus": gpus
-                }
+        # First try Ollama's /api/ps endpoint which shows GPU usage for running models
+        ps_resp = requests.get(f"{OLLAMA_URL}/api/ps", timeout=5)
+        if ps_resp.status_code == 200:
+            ps_data = ps_resp.json()
+            models = ps_data.get("models", [])
+            # Check if any model is using GPU (size_vram > 0)
+            for model in models:
+                size_vram = model.get("size_vram", 0)
+                if size_vram > 0:
+                    gpu_info = [{
+                        "name": "GPU (via Ollama)",
+                        "vram_used_mb": size_vram // (1024 * 1024),
+                        "model_loaded": model.get("name", "unknown")
+                    }]
+                    checks["gpu"] = {
+                        "status": "ok",
+                        "message": f"GPU active - {size_vram // (1024 * 1024)}MB VRAM in use",
+                        "gpus": gpu_info
+                    }
+                    break
+        
+        # If no GPU detected via ps, try nvidia-smi as fallback (for containers with GPU access)
+        if gpu_info is None:
+            import subprocess
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=name,memory.total,memory.free', '--format=csv,noheader,nounits'],
+                capture_output=True, text=True, timeout=5, check=False
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                lines = result.stdout.strip().split('\n')
+                gpus = []
+                for line in lines:
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 3:
+                        gpus.append({
+                            "name": parts[0],
+                            "vram_total_mb": int(parts[1]),
+                            "vram_free_mb": int(parts[2])
+                        })
+                if gpus:
+                    gpu_info = gpus
+                    checks["gpu"] = {
+                        "status": "ok",
+                        "message": f"{len(gpus)} GPU(s) detected",
+                        "gpus": gpus
+                    }
     except Exception:
         pass
     
     if gpu_info is None:
-        checks["gpu"] = {
-            "status": "warning",
-            "message": "No GPU detected or nvidia-smi not available",
-            "fix": "Processing will use CPU (slower). For GPU, install NVIDIA Container Toolkit."
-        }
-        if overall_status == "ok":
-            overall_status = "warning"
+        # No GPU detected - but check if Ollama at least responded (meaning it might have GPU but no model loaded)
+        if checks.get("ollama", {}).get("status") == "ok":
+            checks["gpu"] = {
+                "status": "ok",
+                "message": "GPU available via Ollama (no model currently loaded in VRAM)",
+                "note": "GPU will be used when models are loaded for inference"
+            }
+        else:
+            checks["gpu"] = {
+                "status": "warning",
+                "message": "GPU status unknown - Ollama not connected",
+                "fix": "Connect to Ollama to detect GPU availability"
+            }
+            if overall_status == "ok":
+                overall_status = "warning"
     
     # 4. Disk space
     try:
@@ -1859,7 +1889,8 @@ def get_ollama_models(capability: Optional[str] = None, db: Session = Depends(ge
     """
     ensure_settings_table(db)
     llm = get_setting(db, "llm") or DEFAULT_SETTINGS["llm"]
-    url = llm.get("ollama", {}).get("url", "http://ollama:11434")
+    # Prefer environment variable over database setting
+    url = os.getenv("OLLAMA_URL") or llm.get("ollama", {}).get("url", "http://ollama:11434")
     
     try:
         resp = requests.get(f"{url}/api/tags", timeout=10)

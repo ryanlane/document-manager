@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 from src.config import load_config
 from src.db.models import RawFile, detect_series_info
 from src.db.session import get_db
+from src.db.settings import get_setting, DEFAULT_SETTINGS
 from src.extract.extractors import (
     extract_file_content, 
     generate_thumbnail, 
@@ -243,12 +244,30 @@ def main():
     parser.add_argument("--limit", type=int, help="Max files to process")
     args = parser.parse_args()
 
-    config = load_config()
-    include_paths = [Path(p) for p in config['sources']['include']]
-    exclude_patterns = config['sources']['exclude']
-    include_exts = set(config['extensions'])
-    
     db = next(get_db())
+    
+    # Read source folders from database settings (set via UI)
+    # Fall back to YAML config if database settings don't exist
+    sources = get_setting(db, "sources")
+    if sources:
+        include_paths = [Path(p) for p in sources.get('include', [])]
+        exclude_patterns = sources.get('exclude', [])
+    else:
+        # Fallback to YAML config for backwards compatibility
+        config = load_config()
+        include_paths = [Path(p) for p in config['sources']['include']]
+        exclude_patterns = config['sources']['exclude']
+    
+    # Read extensions from database settings
+    extensions = get_setting(db, "extensions")
+    if extensions:
+        include_exts = set(extensions)
+    else:
+        config = load_config()
+        include_exts = set(config['extensions'])
+    
+    logger.info(f"Source folders: {[str(p) for p in include_paths]}")
+    logger.info(f"Extensions: {sorted(include_exts)}")
     
     # Build a path cache from database for fast skip checks
     # This avoids computing SHA256 for files that haven't changed

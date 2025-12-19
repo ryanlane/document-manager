@@ -16,7 +16,13 @@ import {
   Info,
   Settings,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Plus,
+  Copy,
+  Check,
+  Terminal,
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react'
 import styles from './Setup.module.css'
 
@@ -582,49 +588,212 @@ function Setup() {
           <div className={styles.stepContent}>
             <h2>Source Folders</h2>
             <p className={styles.stepDescription}>
-              Select which folders to index. Only mounted volumes are shown.
+              Select which folders to index. These are folders from your computer that have been mapped into the application.
             </p>
             
-            {availableMounts.length > 0 ? (
-              <div className={styles.folderList}>
-                {availableMounts.map(mount => (
-                  <div 
-                    key={mount.path}
-                    className={`${styles.folderItem} ${selectedFolders.includes(mount.path) ? styles.selected : ''}`}
-                    onClick={() => toggleFolder(mount.path)}
-                  >
-                    <div className={styles.folderCheckbox}>
-                      {selectedFolders.includes(mount.path) && <CheckCircle2 size={20} />}
+            {/* Available Mounts */}
+            {availableMounts.length > 0 && (
+              <>
+                <h3 className={styles.sectionTitle}>Available Folders</h3>
+                <div className={styles.folderList}>
+                  {availableMounts.map(mount => (
+                    <div 
+                      key={mount.path}
+                      className={`${styles.folderItem} ${selectedFolders.includes(mount.path) ? styles.selected : ''}`}
+                      onClick={() => toggleFolder(mount.path)}
+                    >
+                      <div className={styles.folderCheckbox}>
+                        {selectedFolders.includes(mount.path) && <CheckCircle2 size={20} />}
+                      </div>
+                      <FolderOpen size={24} />
+                      <div className={styles.folderInfo}>
+                        <span className={styles.folderPath}>{mount.path}</span>
+                        <span className={styles.folderMeta}>
+                          {mount.file_count?.toLocaleString() || 0} files
+                          {mount.subdir_count > 0 && ` • ${mount.subdir_count} subfolder(s)`}
+                        </span>
+                      </div>
                     </div>
-                    <FolderOpen size={24} />
-                    <div className={styles.folderInfo}>
-                      <span className={styles.folderPath}>{mount.path}</span>
-                      <span className={styles.folderMeta}>
-                        {mount.file_count?.toLocaleString() || 0} files
-                        {mount.total_size && ` • ${(mount.total_size / 1024 / 1024).toFixed(1)} MB`}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={styles.warningBox}>
-                <AlertCircle size={20} />
-                <div>
-                  <p>No mounted folders found.</p>
-                  <p className={styles.hint}>
-                    Mount volumes in docker-compose.yml and restart the container.
-                  </p>
+                  ))}
                 </div>
-              </div>
+              </>
             )}
             
             {selectedFolders.length > 0 && (
               <div className={styles.infoBox}>
                 <Info size={20} />
-                <span>{selectedFolders.length} folder(s) selected for indexing</span>
+                <div>
+                  <span>{selectedFolders.length} folder(s) selected for indexing</span>
+                  <p className={styles.infoBoxHint}>
+                    Changes take effect automatically — no restart required. The worker will pick up new folders on its next scan cycle.
+                  </p>
+                </div>
               </div>
             )}
+            
+            {/* Add More Folders Section */}
+            <div className={styles.addFoldersSection}>
+              <h3 className={styles.sectionTitle}>
+                <Plus size={18} />
+                Add More Folders from Your Computer
+              </h3>
+              
+              <div className={styles.addFolderGuide}>
+                <p>
+                  To index folders from your computer, you need to map them into the Docker containers. 
+                  This is a one-time setup that ensures the application can securely access your files.
+                </p>
+                
+                <div className={styles.guideOptions}>
+                  {/* Option 1: Quick Script */}
+                  <div className={styles.guideOption}>
+                    <div className={styles.guideOptionHeader}>
+                      <Terminal size={20} />
+                      <h4>Option 1: Use Helper Script (Easiest)</h4>
+                    </div>
+                    <p>Run this command in your project directory:</p>
+                    <div className={styles.codeBlock}>
+                      <code>./scripts/add-folder.sh /path/to/your/folder</code>
+                      <button 
+                        className={styles.copyButton}
+                        onClick={() => {
+                          navigator.clipboard.writeText('./scripts/add-folder.sh /path/to/your/folder')
+                        }}
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <p className={styles.guideHint}>
+                      The script will update docker-compose.yml and restart the containers automatically.
+                    </p>
+                  </div>
+                  
+                  {/* Option 2: Manual */}
+                  <div className={styles.guideOption}>
+                    <div className={styles.guideOptionHeader}>
+                      <Settings size={20} />
+                      <h4>Option 2: Manual Configuration</h4>
+                    </div>
+                    <ol className={styles.guideSteps}>
+                      <li>Open <code>docker-compose.yml</code> in your project folder</li>
+                      <li>Find the <code>worker:</code> and <code>api:</code> services</li>
+                      <li>Add your folder under the <code>volumes:</code> section of <strong>both</strong> services:</li>
+                    </ol>
+                    <div className={styles.codeBlock}>
+                      <code>- /your/folder/path:/data/archive/foldername</code>
+                      <button 
+                        className={styles.copyButton}
+                        onClick={() => {
+                          navigator.clipboard.writeText('- /your/folder/path:/data/archive/foldername')
+                        }}
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <ol className={styles.guideSteps} start={4}>
+                      <li>Save the file and restart:
+                        <div className={styles.codeBlock}>
+                          <code>docker compose down && docker compose up -d</code>
+                          <button 
+                            className={styles.copyButton}
+                            onClick={() => {
+                              navigator.clipboard.writeText('docker compose down && docker compose up -d')
+                            }}
+                            title="Copy to clipboard"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                      </li>
+                      <li>Refresh this page - your folder will appear above</li>
+                    </ol>
+                  </div>
+                </div>
+                
+                {/* Platform-specific examples */}
+                <div className={styles.platformExamples}>
+                  <h4><HelpCircle size={16} /> Path Examples by Platform</h4>
+                  
+                  <div className={styles.platformExample}>
+                    <span className={styles.platformLabel}>Windows (via WSL/Docker Desktop):</span>
+                    <div className={styles.codeBlock}>
+                      <code>- /mnt/c/Users/YourName/Documents:/data/archive/documents</code>
+                      <button 
+                        className={styles.copyButton}
+                        onClick={() => navigator.clipboard.writeText('- /mnt/c/Users/YourName/Documents:/data/archive/documents')}
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <span className={styles.platformNote}>
+                      Windows paths use <code>/mnt/c/</code> for C: drive, <code>/mnt/d/</code> for D: drive, etc.
+                    </span>
+                  </div>
+                  
+                  <div className={styles.platformExample}>
+                    <span className={styles.platformLabel}>macOS:</span>
+                    <div className={styles.codeBlock}>
+                      <code>- /Users/yourname/Documents:/data/archive/documents</code>
+                      <button 
+                        className={styles.copyButton}
+                        onClick={() => navigator.clipboard.writeText('- /Users/yourname/Documents:/data/archive/documents')}
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className={styles.platformExample}>
+                    <span className={styles.platformLabel}>Linux:</span>
+                    <div className={styles.codeBlock}>
+                      <code>- /home/yourname/Documents:/data/archive/documents</code>
+                      <button 
+                        className={styles.copyButton}
+                        onClick={() => navigator.clipboard.writeText('- /home/yourname/Documents:/data/archive/documents')}
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className={styles.platformExample}>
+                    <span className={styles.platformLabel}>Network/NAS Drive:</span>
+                    <div className={styles.codeBlock}>
+                      <code>- /mnt/nas/shared:/data/archive/nas-files</code>
+                      <button 
+                        className={styles.copyButton}
+                        onClick={() => navigator.clipboard.writeText('- /mnt/nas/shared:/data/archive/nas-files')}
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <span className={styles.platformNote}>
+                      Ensure the network drive is mounted on your host system first.
+                    </span>
+                  </div>
+                </div>
+                
+                <button 
+                  className={styles.refreshButton}
+                  onClick={async () => {
+                    const res = await fetch(`${API_BASE}/settings/sources/mounts`)
+                    if (res.ok) {
+                      const data = await res.json()
+                      setAvailableMounts(data.mounts || [])
+                    }
+                  }}
+                >
+                  <RefreshCw size={16} />
+                  Refresh Available Folders
+                </button>
+              </div>
+            </div>
           </div>
         )
       

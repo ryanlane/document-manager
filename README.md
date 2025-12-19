@@ -1,5 +1,7 @@
 # Archive Brain
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A personal document archive assistant that ingests, segments, enriches, and allows semantic search and RAG (Retrieval Augmented Generation) over your local document collection. Supports text files, PDFs, images (with OCR and AI vision descriptions), and more.
 
 ## 🚀 Quick Start

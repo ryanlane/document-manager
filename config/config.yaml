@@ -6,6 +6,7 @@ sources:
     - "/data/archive/docs"
     # Network drive path mapped inside container
     - "/data/archive/story"
+    - "/data/archive/knowledge"
   
   exclude:
     - "**/node_modules/**"

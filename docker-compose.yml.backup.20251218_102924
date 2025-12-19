@@ -93,7 +93,6 @@ services:
     volumes:
       - ./backend:/app
       - ./config:/app/config
-      - /mnt/oak/knowledge:/data/archive/knowledge
       # Mount the data directories here so the worker can access them
       - ./archive_root:/data/archive
       - /mnt/mediaboy/story:/data/archive/story
@@ -141,7 +140,6 @@ services:
       - ./backend:/app
       - ./config:/app/config
       - ./archive_root:/data/archive
-      - /mnt/oak/knowledge:/data/archive/knowledge
       # Mount the network drive (ensure this path exists and is mounted in WSL)
       - /mnt/mediaboy/story:/data/archive/story
       - worker_shared:/app/shared
