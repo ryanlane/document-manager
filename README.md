@@ -10,6 +10,7 @@ This project is designed for people who want to *understand* and *explore* their
 
 ---
 
+
 ## ✨ What Archive Brain Does
 
 - Ingests documents from local folders
@@ -21,6 +22,11 @@ This project is designed for people who want to *understand* and *explore* their
   - Tags
 - Builds vector embeddings for semantic search
 - Lets you ask natural-language questions over your archive
+
+<p align="center">
+  <img src="docs/images/ab-interact.png" alt="Archive Brain Search UI" width="600" />
+  <br><em>Main semantic search interface</em>
+</p>
 
 All processing runs locally via Docker and Ollama.
 
@@ -75,6 +81,7 @@ This is a one-time setup step and is required before your files will appear in t
 
 ---
 
+
 ## 🧠 How It Works (High Level)
 
 Archive Brain runs a background pipeline:
@@ -84,6 +91,11 @@ Archive Brain runs a background pipeline:
 3. **Enrich** – Generate metadata using LLMs
 4. **Embed** – Create vector embeddings for search
 5. **Retrieve & Generate** – Power semantic search and Q&A
+
+<p align="center">
+  <img src="docs/images/ab-dashboard.png" alt="Archive Brain Dashboard" width="600" />
+  <br><em>Dashboard: pipeline status and progress</em>
+</p>
 
 ➡️ For details, see **[`docs/architecture.md`](docs/architecture.md)**.
 
@@ -173,6 +185,14 @@ docker compose up -d --build
 * Large archives may require batching or GPU acceleration
 
 ---
+
+
+## 🧬 Embeddings Visualization
+
+<p align="center">
+  <img src="docs/images/ab-embeddings.png" alt="Embeddings Visualization" width="600" />
+  <br><em>Visualize document and chunk embeddings</em>
+</p>
 
 ## 🛠️ Tech Stack
 

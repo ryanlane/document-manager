@@ -7,7 +7,13 @@ Archive Brain runs in Docker containers, so folders from your host system need t
 1. **Edit docker-compose.yml**
 2. **Add volume lines** to both `api` and `worker` services
 3. **Restart containers** with `docker compose up -d`
+
 4. **Select folders** in the web UI under Settings → Sources
+
+<p align="center">
+  <img src="images/ab-settings.png" alt="Archive Brain Settings UI" width="600" />
+  <br><em>Settings: add or remove source folders and configure LLMs</em>
+</p>
 
 ## Volume Mount Syntax
 
