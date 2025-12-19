@@ -312,3 +312,5 @@ pyrightconfig.json
 archive_dev/*
 !archive_dev/.gitkeep
 docs/TURNKEY_PLAN.md
+docker-compose.oak.yml
+docker-compose.yml
