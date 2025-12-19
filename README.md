@@ -1,180 +1,200 @@
+
 # Archive Brain
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A personal document archive assistant that ingests, segments, enriches, and allows semantic search and RAG (Retrieval Augmented Generation) over your local document collection. Supports text files, PDFs, images (with OCR and AI vision descriptions), and more.
+Archive Brain is a **local-first document archive assistant**.  
+It ingests your personal files, enriches them with metadata, and enables **semantic search and Retrieval-Augmented Generation (RAG)** — all running on your own machine.
+
+This project is designed for people who want to *understand* and *explore* their archives, not ship their data to the cloud.
+
+---
+
+## ✨ What Archive Brain Does
+
+- Ingests documents from local folders
+- Extracts text from PDFs, images (OCR), and plain text
+- Segments large documents into meaningful chunks
+- Uses local LLMs to generate:
+  - Titles
+  - Summaries
+  - Tags
+- Builds vector embeddings for semantic search
+- Lets you ask natural-language questions over your archive
+
+All processing runs locally via Docker and Ollama.
+
+---
+
+## 🔐 Data & Privacy Model
+
+Archive Brain is **local-first by default**.
+
+- Files are read from your local filesystem
+- All processing happens inside Docker containers on your machine
+- LLM inference runs via Ollama (local or self-hosted)
+- No data is sent to external services unless *you explicitly configure it*
+
+If you point the system at a remote LLM or external API, you control that tradeoff.
+
+---
 
 ## 🚀 Quick Start
 
 ```bash
-# Clone and start (self-contained with Ollama included)
 docker compose up -d --build
+````
 
-# First run will pull LLM models (~4GB) - check progress:
+On first run, the system will download required LLM models (several GB).
+You can monitor progress with:
+
+```bash
 docker compose logs -f ollama-init
-
-# Access the app at http://localhost:3000
 ```
 
-That's it! The system includes everything needed: PostgreSQL, Apache Tika, Ollama, and the application.
+Once running, open:
 
-## Project Structure
+* **Web UI:** [http://localhost:3000](http://localhost:3000)
+* **API:** [http://localhost:8000](http://localhost:8000)
 
-- **backend/**: Python source code for ingestion, processing, and API.
-  - **src/api**: FastAPI server
-  - **src/db**: Database models and connection logic.
-  - **src/ingest**: File ingestion scripts.
-  - **src/segment**: Document segmentation logic.
-  - **src/enrich**: Metadata enrichment using LLMs.
-  - **src/rag**: Retrieval and generation logic.
-  - **src/extract**: File content extraction (OCR, PDF, images)
-- **frontend/**: React application
-- **config/**: Configuration files.
-- **docs/**: Project documentation.
+That’s it — the ingestion pipeline starts automatically.
 
-## Prerequisites
+➡️ **New here?**
+Read **[`docs/first-run.md`](docs/first-run.md)** for what to expect on first startup.
 
-1. **Docker & Docker Compose** installed.
-2. **16GB+ RAM** recommended (Ollama needs ~8GB for models).
-3. **Network Drives** (optional): If using network paths, ensure they are mounted at the expected paths.
+---
 
-## Configuration
+## 📂 Adding Your Documents
 
-### Environment Variables
+Archive Brain runs in Docker, so folders from your host system must be explicitly
+mounted before they can be indexed.
 
-Copy `.env.example` to `.env` and customize:
+This is a one-time setup step and is required before your files will appear in the UI.
+
+➡️ **Read:** [Adding Folders to Archive Brain](docs/ADDING_FOLDERS.md)
+
+---
+
+## 🧠 How It Works (High Level)
+
+Archive Brain runs a background pipeline:
+
+1. **Ingest** – Scan folders and extract raw content
+2. **Segment** – Split content into logical chunks
+3. **Enrich** – Generate metadata using LLMs
+4. **Embed** – Create vector embeddings for search
+5. **Retrieve & Generate** – Power semantic search and Q&A
+
+➡️ For details, see **[`docs/architecture.md`](docs/architecture.md)**.
+
+---
+
+## 📦 Supported File Types
+
+| Type      | Extensions                               | Notes                     |
+| --------- | ---------------------------------------- | ------------------------- |
+| Text      | `.txt`, `.md`, `.html`                   | Full text extraction      |
+| PDF       | `.pdf`                                   | Text + OCR fallback       |
+| Images    | `.jpg`, `.png`, `.gif`, `.webp`, `.tiff` | OCR + vision descriptions |
+| Documents | `.docx`                                  | Planned                   |
+
+---
+
+## ⚙️ Configuration
 
 ```bash
 cp .env.example .env
 ```
 
 Key settings:
-- `OLLAMA_MODEL`: Chat model (default: `dolphin-phi`)
-- `OLLAMA_EMBEDDING_MODEL`: Embedding model (default: `nomic-embed-text`)
-- `OLLAMA_VISION_MODEL`: Vision model for images (default: `llava`)
-- `DB_PASSWORD`: Database password
 
-### Source Directories
+* `OLLAMA_MODEL` – Chat model
+* `OLLAMA_EMBEDDING_MODEL` – Embedding model
+* `OLLAMA_VISION_MODEL` – Vision model
+* `DB_PASSWORD` – Database password
 
-Edit `config/config.yaml` to define your source directories and file extensions.
+Source folders and file types are defined in:
+
+```text
+config/config.yaml
+```
+
+---
 
 ## 🖥️ Deployment Options
 
-### Option 1: Self-Contained (Default - Recommended for SaaS)
+### Default (Recommended)
 
-Everything runs in Docker, including Ollama. Just works on any system:
+Self-contained Docker setup with Ollama included:
 
 ```bash
 docker compose up -d
 ```
 
-### Option 2: With GPU Acceleration (NVIDIA)
+### NVIDIA GPU Acceleration
 
-If you have an NVIDIA GPU and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html):
+Requires NVIDIA Container Toolkit:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
-### Option 3: External Ollama (Development)
+### External Ollama (Advanced)
 
-Use Ollama running on your host machine (e.g., with GPU):
+Run Ollama on the host or another machine:
 
 ```bash
-# Start Ollama on host with: OLLAMA_HOST=0.0.0.0 ollama serve
 export OLLAMA_URL=http://host.docker.internal:11434
 docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
 ```
 
-## Running the System
+---
 
-The worker container automatically processes files through the pipeline:
+## 🔄 Re-running & Iteration
 
-1. **Ingest** → Scans folders, extracts text (including OCR for images/PDFs)
-2. **Segment** → Splits into logical chunks
-3. **Enrich** → LLM generates titles, summaries, tags
-4. **Embed** → Creates vector embeddings for semantic search
+* Pipeline steps are designed to be **idempotent**
+* Re-running ingestion will skip unchanged files
+* Metadata and embeddings are reused when possible
 
-**Monitor progress:**
-```bash
-docker compose logs -f worker
-```
-
-**Manual pipeline steps** (if needed):
-```bash
-docker compose exec worker python -m src.ingest.ingest_files
-docker compose exec worker python -m src.segment.segment_entries
-docker compose exec worker python -m src.enrich.enrich_entries
-docker compose exec worker python -m src.rag.embed_entries
-```
-
-## Using the Application
-
-### Web Interface
-
-- **Home** (`http://localhost:3000`): Semantic search with filters
-- **Dashboard**: Processing status and statistics
-- **Files**: Browse all ingested documents
-- **Gallery**: View images with AI descriptions
-- **How It Works**: Learn about the RAG pipeline
-
-### API Endpoints
-
-The API runs at `http://localhost:8000`.
+To reset everything:
 
 ```bash
-# Semantic search
-curl -X POST "http://localhost:8000/search" \
-     -H "Content-Type: application/json" \
-     -d '{"query": "machine learning tutorials", "k": 10}'
-
-# Ask a question (RAG)
-curl -X POST "http://localhost:8000/ask" \
-     -H "Content-Type: application/json" \
-     -d '{"query": "What did I write about in 2020?", "k": 5}'
-
-# Health check
-curl http://localhost:8000/health
-
-# List available models
-curl http://localhost:8000/models
+docker compose down -v
+docker compose up -d --build
 ```
 
-## Supported File Types
+---
 
-| Type | Extensions | Features |
-|------|------------|----------|
-| Text | `.txt`, `.md`, `.html` | Full text extraction |
-| PDF | `.pdf` | Text + OCR fallback |
-| Images | `.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.tiff` | OCR + AI vision descriptions |
-| Documents | `.docx` (planned) | Coming soon |
+## 🚧 Current Limitations
 
-## Tech Stack
+* Single-user only
+* No authentication or access control
+* Not optimized for real-time ingestion
+* Large archives may require batching or GPU acceleration
 
-- **Database**: PostgreSQL with pgvector
-- **LLM**: Ollama (containerized or external)
-- **Backend**: Python, FastAPI
-- **Frontend**: React, Vite
-- **Extraction**: Apache Tika, Tesseract OCR, PyMuPDF
-- **Orchestration**: Docker Compose
+---
 
-## Troubleshooting
+## 🛠️ Tech Stack
 
-**Models not loading?**
-```bash
-# Check Ollama status
-docker compose logs ollama
-# Manually pull models
-docker compose exec ollama ollama pull nomic-embed-text
-```
+* PostgreSQL + pgvector
+* Python + FastAPI
+* React + Vite
+* Apache Tika, Tesseract OCR
+* Ollama (LLMs)
+* Docker Compose
 
-**Out of memory?**
-- Reduce model size: Set `OLLAMA_MODEL=tinyllama` in `.env`
-- Or use external Ollama with GPU
+---
 
-**Images not being analyzed?**
-- Check vision model: `docker compose exec ollama ollama list`
-- Pull if missing: `docker compose exec ollama ollama pull llava`
+## 📚 Documentation
 
+* **First Run Guide:** [`docs/first-run.md`](./docs/first-run.md)
+* **Adding Source Folders:** [`docs/ADDING_FOLDERS.md`](docs/ADDING_FOLDERS.md)
+* **Architecture Overview:** [`docs/architecture.md`](./docs/architecture.md)
+
+---
+
+## 📄 License
+
+[MIT](./LICENSE)
 
 

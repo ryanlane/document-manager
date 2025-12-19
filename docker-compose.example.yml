@@ -1,0 +1,90 @@
+version: "3.9"
+
+services:
+  # -----------------------------
+  # Database (Postgres + Vector)
+  # -----------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: example_db
+    profiles:
+      - prod
+    environment:
+      POSTGRES_USER: ${DB_USER:-appuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-appdb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Exposed for local development only
+      - "5432:5432"
+    networks:
+      - app_net
+
+  # -----------------------------
+  # Backend API
+  # -----------------------------
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: example_api
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-appuser}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-appdb}
+      APP_ENV: ${APP_ENV:-development}
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    networks:
+      - app_net
+
+  # -----------------------------
+  # Background Worker
+  # -----------------------------
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: example_worker
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-appuser}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-appdb}
+    depends_on:
+      - db
+    volumes:
+      - worker_shared:/shared
+    networks:
+      - app_net
+
+  # -----------------------------
+  # Frontend
+  # -----------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: example_frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      # For local dev hot-reload
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - app_net
+
+# -----------------------------
+# Volumes
+# -----------------------------
+volumes:
+  postgres_data:
+  worker_shared:
+
+# -----------------------------
+# Networks
+# -----------------------------
+networks:
+  app_net:
+    driver: bridge
