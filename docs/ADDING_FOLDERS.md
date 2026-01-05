@@ -6,7 +6,7 @@ Archive Brain runs in Docker containers, so folders from your host system need t
 
 1. **Edit docker-compose.yml**
 2. **Add volume lines** to both `api` and `worker` services
-3. **Restart containers** with `docker compose up -d`
+3. **Restart containers** with `docker compose -f docker-compose.yml --profile prod up -d`
 
 4. **Select folders** in the web UI under Settings → Sources
 
@@ -133,7 +133,7 @@ services:
 1. **Restart Docker**:
    ```bash
    docker compose down
-   docker compose up -d
+  docker compose -f docker-compose.yml --profile prod up -d
    ```
 
 2. **Open Settings → Sources** in the web UI

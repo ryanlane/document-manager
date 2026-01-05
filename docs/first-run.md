@@ -99,8 +99,8 @@ Most pipeline steps are **idempotent**, meaning unchanged files are skipped auto
 To fully reset the system and start fresh:
 
 ```bash
-docker compose down -v
-docker compose up -d --build
+docker compose -f docker-compose.yml --profile prod down -v
+docker compose -f docker-compose.yml --profile prod up -d --build
 ```
 
 This removes all stored data and embeddings.

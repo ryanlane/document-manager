@@ -48,14 +48,14 @@ If you point the system at a remote LLM or external API, you control that tradeo
 ## 🚀 Quick Start
 
 ```bash
-docker compose up -d --build
-````
+docker compose -f docker-compose.yml --profile prod up -d --build
+```
 
 On first run, the system will download required LLM models (several GB).
 You can monitor progress with:
 
 ```bash
-docker compose logs -f ollama-init
+docker compose -f docker-compose.yml --profile prod logs -f ollama-init
 ```
 
 Once running, open:
@@ -140,7 +140,7 @@ config/config.yaml
 Self-contained Docker setup with Ollama included:
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.yml --profile prod up -d
 ```
 
 ### NVIDIA GPU Acceleration
@@ -148,7 +148,7 @@ docker compose up -d
 Requires NVIDIA Container Toolkit:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile prod up -d
 ```
 
 ### External Ollama (Advanced)
@@ -157,7 +157,7 @@ Run Ollama on the host or another machine:
 
 ```bash
 export OLLAMA_URL=http://host.docker.internal:11434
-docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.external-llm.yml --profile prod up -d
 ```
 
 ---
@@ -171,8 +171,8 @@ docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
 To reset everything:
 
 ```bash
-docker compose down -v
-docker compose up -d --build
+docker compose -f docker-compose.yml --profile prod down -v
+docker compose -f docker-compose.yml --profile prod up -d --build
 ```
 
 ---
