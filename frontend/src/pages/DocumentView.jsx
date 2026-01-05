@@ -29,6 +29,9 @@ function DocumentView() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [file, setFile] = useState(null)
+  const [content, setContent] = useState('')
+  const [contentLoading, setContentLoading] = useState(false)
+  const [contentError, setContentError] = useState(null)
   const [metadata, setMetadata] = useState(null)
   const [showMetadata, setShowMetadata] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -37,20 +40,62 @@ function DocumentView() {
   const [copied, setCopied] = useState(null)
 
   useEffect(() => {
-    fetch(`/api/files/${id}`)
-      .then(res => {
+    let cancelled = false
+
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      setFile(null)
+      setContent('')
+      setContentError(null)
+      setContentLoading(false)
+      setMetadata(null)
+      setShowMetadata(false)
+
+      try {
+        const res = await fetch(`/api/files/${id}`)
         if (!res.ok) throw new Error('Failed to load file')
-        return res.json()
-      })
-      .then(data => {
+        const data = await res.json()
+        if (cancelled) return
         setFile(data)
         setLoading(false)
-      })
-      .catch(err => {
+
+        const name = (data.filename || '').toLowerCase()
+        const previewable =
+          name.endsWith('.txt') ||
+          name.endsWith('.md') ||
+          name.endsWith('.markdown') ||
+          name.endsWith('.html') ||
+          name.endsWith('.htm')
+
+        if (!previewable) return
+
+        setContentLoading(true)
+        try {
+          const contentRes = await fetch(`/api/files/${id}/content`)
+          if (!contentRes.ok) throw new Error('Failed to load file content')
+          const text = await contentRes.text()
+          if (cancelled) return
+          setContent(text)
+        } catch (err) {
+          if (cancelled) return
+          console.error(err)
+          setContentError(err.message)
+        } finally {
+          if (!cancelled) setContentLoading(false)
+        }
+      } catch (err) {
+        if (cancelled) return
         console.error(err)
         setError(err.message)
         setLoading(false)
-      })
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   const loadMetadata = async () => {
@@ -351,20 +396,24 @@ function DocumentView() {
       )}
 
       <article className={styles.content}>
-        {isHtml ? (
+        {contentLoading ? (
+          <div className={styles.loading}>Loading content...</div>
+        ) : contentError ? (
+          <div className={styles.error}>Error: {contentError}</div>
+        ) : isHtml ? (
           <div 
             className={styles.text}
-            dangerouslySetInnerHTML={{ __html: getProcessedHtml(file.raw_text) }}
+            dangerouslySetInnerHTML={{ __html: getProcessedHtml(content) }}
           />
         ) : isMarkdown ? (
           <div className={`${styles.text} ${styles.markdown}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {file.raw_text || ''}
+              {content || ''}
             </ReactMarkdown>
           </div>
         ) : (
           <div className={styles.text}>
-            {getProcessedText(file.raw_text)}
+            {getProcessedText(content)}
           </div>
         )}
       </article>
