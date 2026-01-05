@@ -75,6 +75,9 @@ Read **[`docs/first-run.md`](docs/first-run.md)** for what to expect on first st
 Archive Brain runs in Docker, so folders from your host system must be explicitly
 mounted before they can be indexed.
 
+If you can search but clicking a document shows empty content or **Open source** returns `{"detail":"File not found on disk"}`, it usually means the file path exists in the database but the underlying folder is not mounted into the containers.
+Set `STORY_SOURCE` / `KNOWLEDGE_SOURCE` in `.env` to point at your real folders (see `.env.example`), then restart the stack.
+
 This is a one-time setup step and is required before your files will appear in the UI.
 
 ➡️ **Read:** [Adding Folders to Archive Brain](docs/ADDING_FOLDERS.md)

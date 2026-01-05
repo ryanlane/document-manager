@@ -430,21 +430,19 @@ def calculate_eta(pending_count: int, rate_per_min: float) -> dict:
 
 def get_doc_stats_with_eta(db: Session) -> dict:
     """Get document-level stats with enrichment ETAs."""
-    from ...db.models import File
-    
-    # Count docs by enrichment status
-    total_docs = db.query(File).count()
-    enriched_docs = db.query(File).filter(File.enrichment_status == 'completed').count()
-    pending_docs = db.query(File).filter(
-        File.enrichment_status.in_(['pending', 'processing'])
-    ).count()
-    
+    from ...db.models import RawFile
+
+    # Count docs by document-level status
+    total_docs = db.query(RawFile).count()
+    enriched_docs = db.query(RawFile).filter(RawFile.doc_status == 'enriched').count()
+    pending_docs = db.query(RawFile).filter(RawFile.doc_status == 'pending').count()
+
     # Get recent doc enrichment rate (last hour)
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
     recent_enriched_docs = db.execute(text("""
-        SELECT COUNT(*) FROM files 
-        WHERE enrichment_status = 'completed' 
-        AND updated_at > :cutoff
+        SELECT COUNT(*) FROM raw_files
+        WHERE doc_status = 'enriched'
+          AND updated_at > :cutoff
     """), {"cutoff": one_hour_ago}).scalar() or 0
     
     doc_rate_per_min = recent_enriched_docs / 60 if recent_enriched_docs > 0 else 0
