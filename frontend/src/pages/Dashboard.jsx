@@ -274,21 +274,38 @@ function Dashboard() {
   const updateWorkerState = async (updates) => {
     // Mark the keys as pending
     Object.keys(updates).forEach(key => setPendingToggle(key, true))
-    
+
     try {
       const res = await fetch('/api/worker/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       })
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('Worker state update failed:', res.status, errorText)
+        addToast('Failed to update worker state', 'error')
+        // Clear pending state immediately on error
+        Object.keys(updates).forEach(key => setPendingToggle(key, false))
+        return
+      }
+
       const data = await res.json()
+      console.log('Worker state updated:', data)
       setWorkerState(data)
-    } catch (err) { console.error('update state:', err) }
-    
-    // Clear pending state after a short delay to show the transition
-    setTimeout(() => {
+      addToast('Worker state updated', 'success')
+      
+      // Clear pending state after a short delay to show the transition
+      setTimeout(() => {
+        Object.keys(updates).forEach(key => setPendingToggle(key, false))
+      }, 300)
+    } catch (err) {
+      console.error('update state error:', err)
+      addToast('Error updating worker state', 'error')
+      // Clear pending state immediately on error
       Object.keys(updates).forEach(key => setPendingToggle(key, false))
-    }, 300)
+    }
   }
 
   const toggleProcess = (process) => {

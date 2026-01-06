@@ -57,9 +57,13 @@ function Logs() {
 
   // Parse a log line into structured data
   const parseLogLine = useCallback((line, index) => {
+    // Strip any leading level prefix (e.g., "INFO\n") that might be on the line
+    const cleanLine = line.replace(/^(INFO|WARNING|ERROR|DEBUG)\s*\n?/, '').trim()
+
     // Format: 2024-12-15 10:30:45,123 - module_name - LEVEL - Message
-    const match = line.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\d{3})\s+-\s+(\w+)\s+-\s+(\w+)\s+-\s+(.*)$/)
-    
+    // Module name can contain dots (e.g., src.segment.segment_entries)
+    const match = cleanLine.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2},\d{3})\s+-\s+([\w.]+)\s+-\s+(\w+)\s+-\s+(.*)$/)
+
     if (match) {
       const [, timestamp, module, level, message] = match
       
@@ -137,8 +141,18 @@ function Logs() {
       const lines = data.lines || []
       setLogs(lines)
       
-      // Parse all lines
-      const parsed = lines.map((line, i) => parseLogLine(line.trim(), i)).filter(l => l.message.trim())
+      // Parse all lines with error handling
+      const parsed = lines
+        .map((line, i) => {
+          try {
+            return parseLogLine(line.trim(), i)
+          } catch (err) {
+            console.error('Error parsing log line:', err, line)
+            return null
+          }
+        })
+        .filter(l => l && l.message && l.message.trim())
+      
       setParsedLogs(parsed)
       
       // Calculate stats

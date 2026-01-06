@@ -94,6 +94,8 @@ class WorkerState:
         Example:
             update_config({"ingest": False, "enrich": True})
         """
+        from sqlalchemy.orm.attributes import flag_modified
+        
         worker = self._ensure_worker_exists()
 
         config = worker.config or {}
@@ -102,16 +104,23 @@ class WorkerState:
         # Ensure phases is a dict
         if isinstance(phases, list):
             phases = {phase: True for phase in phases}
-
+        
+        # Make a new dict to ensure it's tracked
+        phases = dict(phases)
+        
         # Apply updates
         phases.update(updates)
         config["phases"] = phases
 
         worker.config = config
+        flag_modified(worker, "config")
         worker.last_heartbeat = datetime.utcnow()
+        self.db.flush()
         self.db.commit()
+        self.db.refresh(worker)
 
-        logger.debug(f"Updated worker config: {updates}")
+        logger.info(f"Updated worker config: {updates} -> new config: {worker.config}")
+
 
     def update_progress(
         self,

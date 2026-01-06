@@ -330,3 +330,7 @@ docs/WORKER_STATE_ARCHITECTURE.md
 docs/WORKER_STATE_MIGRATION_PLAN.md
 docs/WORKER_STATE_MIGRATION_PROGRESS.md
 docs/WORKER_STATE_MIGRATION_SUMMARY.md
+# Git Bash path conversion artifacts (Windows)
+# Git Bash on Windows incorrectly converts /app paths to C:/Program Files/Git/app
+**/C:/
+backend/C/
