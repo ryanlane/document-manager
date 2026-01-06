@@ -114,15 +114,19 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
         if path_cache is not None and path_str in path_cache:
             cached = path_cache[path_str]
             if cached['mtime'] == mtime and cached['size'] == size_bytes:
-                logger.debug(f"Skipping {file_path} (unchanged - fast path)")
-                return "skipped"
+                # If extraction previously failed, retry even if file is unchanged.
+                if cached.get('status') != 'extract_failed':
+                    logger.debug(f"Skipping {file_path} (unchanged - fast path)")
+                    return "skipped"
         
         # If not in cache or file changed, query DB to double-check
         existing_by_path = db.query(RawFile).filter(RawFile.path == path_str).first()
         if existing_by_path:
             if existing_by_path.mtime == mtime and existing_by_path.size_bytes == size_bytes:
-                logger.debug(f"Skipping {file_path} (unchanged)")
-                return "skipped"
+                # If extraction previously failed, retry even if file is unchanged.
+                if existing_by_path.status != 'extract_failed':
+                    logger.debug(f"Skipping {file_path} (unchanged)")
+                    return "skipped"
         
         # File is new or modified - now we need to compute SHA256
         sha256 = compute_sha256(file_path)
@@ -133,12 +137,47 @@ def ingest_file(db: Session, file_path: Path, dry_run: bool = False, path_cache:
         if existing_by_sha:
             # Content already exists - update path/metadata if different
             if existing_by_sha.path == path_str and existing_by_sha.mtime == mtime:
-                logger.debug(f"Skipping {file_path} (unchanged)")
-                return "skipped"
+                # If extraction previously failed, retry even if content is unchanged.
+                if existing_by_sha.status != 'extract_failed':
+                    logger.debug(f"Skipping {file_path} (unchanged)")
+                    return "skipped"
             
             if dry_run:
                 logger.info(f"[DRY RUN] Would update {file_path} (SHA match)")
                 return "skipped"
+
+            # If the existing record previously failed extraction, retry extraction now.
+            if existing_by_sha.status == "extract_failed":
+                raw_text, file_type, extract_meta = extract_text(file_path, extension)
+                if not raw_text and file_type not in ('image',):  # Images may have no OCR text
+                    logger.warning(f"Could not extract text for {file_path}")
+                    existing_by_sha.status = "extract_failed"
+                else:
+                    existing_by_sha.status = "ok"
+
+                existing_by_sha.path = path_str
+                existing_by_sha.filename = file_path.name
+                existing_by_sha.extension = extension
+                existing_by_sha.size_bytes = size_bytes
+                existing_by_sha.mtime = mtime
+                existing_by_sha.raw_text = raw_text or ""
+                existing_by_sha.file_type = file_type
+
+                # Update image/PDF specific fields
+                if file_type == 'image':
+                    existing_by_sha.ocr_text = raw_text
+                    existing_by_sha.image_width = extract_meta.get('image_width')
+                    existing_by_sha.image_height = extract_meta.get('image_height')
+                    thumbnail = generate_thumbnail(file_path, sha256)
+                    if thumbnail:
+                        existing_by_sha.thumbnail_path = thumbnail
+                elif file_type == 'pdf':
+                    if extract_meta.get('is_scanned'):
+                        existing_by_sha.ocr_text = raw_text
+
+                logger.info(f"Re-extracted {file_path} (SHA match, type: {file_type})")
+                db.commit()
+                return "updated"
 
             # Update existing record with new path/metadata
             existing_by_sha.path = path_str
@@ -275,10 +314,10 @@ def main():
     logger.info("Building path cache from database...")
     path_cache = {}
     try:
-        # Only fetch path, mtime, size - not the full row
-        results = db.query(RawFile.path, RawFile.mtime, RawFile.size_bytes).all()
-        for path, mtime, size in results:
-            path_cache[path] = {'mtime': mtime, 'size': size}
+        # Only fetch path, mtime, size, status - still lightweight, but enables retry of extract_failed
+        results = db.query(RawFile.path, RawFile.mtime, RawFile.size_bytes, RawFile.status).all()
+        for path, mtime, size, status in results:
+            path_cache[path] = {'mtime': mtime, 'size': size, 'status': status}
         logger.info(f"Loaded {len(path_cache)} files into path cache")
     except Exception as e:
         logger.warning(f"Could not build path cache: {e}")

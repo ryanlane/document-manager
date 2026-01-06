@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 from io import BytesIO
 
+import requests
+
 try:
     from PIL import Image
     PIL_AVAILABLE = True
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
 # Supported file types by category
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif'}
 PDF_EXTENSIONS = {'.pdf'}
-DOCUMENT_EXTENSIONS = {'.docx', '.doc', '.odt', '.rtf'}
+DOCUMENT_EXTENSIONS = {'.docx', '.doc', '.odt', '.rtf', '.epub'}
 TEXT_EXTENSIONS = {'.txt', '.md', '.html', '.json', '.yaml', '.yml', '.py', '.js', '.ts', '.sql', '.xml', '.csv'}
 
 # Thumbnail settings
@@ -251,6 +253,40 @@ def extract_text_from_pdf(file_path: Path) -> Tuple[str, Dict[str, Any]]:
     return text.strip(), metadata
 
 
+def extract_text_from_document_via_tika(file_path: Path) -> Tuple[str, Dict[str, Any]]:
+    """Extract text from office/rtf documents via Apache Tika server."""
+    tika_url = os.environ.get("TIKA_URL", "http://tika:9998").rstrip("/")
+    metadata: Dict[str, Any] = {
+        "tika_url": tika_url,
+        "tika_content_type": None,
+    }
+
+    try:
+        headers = {
+            "Accept": "text/plain",
+            "Content-Disposition": f'attachment; filename="{file_path.name}"',
+        }
+        with open(file_path, "rb") as f:
+            resp = requests.put(
+                f"{tika_url}/tika",
+                data=f,
+                headers=headers,
+                timeout=(5, 120),
+            )
+        if not resp.ok:
+            logger.warning(
+                f"Tika extraction failed for {file_path.name}: {resp.status_code} {resp.text[:200]}"
+            )
+            return "", metadata
+
+        metadata["tika_content_type"] = resp.headers.get("Content-Type")
+        text = resp.text or ""
+        return text.strip(), metadata
+    except Exception as e:
+        logger.warning(f"Tika extraction error for {file_path}: {e}")
+        return "", metadata
+
+
 def extract_file_content(file_path: Path, extension: str) -> Tuple[str, str, Dict[str, Any]]:
     """
     Extract content from any supported file type.
@@ -275,9 +311,9 @@ def extract_file_content(file_path: Path, extension: str) -> Tuple[str, str, Dic
             raw_text, metadata = extract_text_from_pdf(file_path)
             
         elif file_type == 'document':
-            # TODO: Add support for DOCX, DOC, ODT, RTF
-            logger.warning(f"Document extraction not yet implemented for {extension}")
-            raw_text = ""
+            raw_text, metadata = extract_text_from_document_via_tika(file_path)
+            if not raw_text:
+                logger.warning(f"Document extraction returned no text for {file_path.name} ({extension})")
             
         else:
             logger.warning(f"Unsupported file type: {extension}")
