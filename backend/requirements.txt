@@ -27,4 +27,5 @@ umap-learn
 pytest
 pytest-asyncio
 pytest-cov
+pytest-mock
 httpx  # For async TestClient support
