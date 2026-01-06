@@ -431,8 +431,7 @@ def get_doc_counts(db: Session = Depends(get_db)):
 @router.get("/system/storage")
 def get_storage_stats(db: Session = Depends(get_db)):
     """Storage stats - can be loaded lazily."""
-    from sqlalchemy import func as sql_func
-    size_result = db.query(sql_func.sum(RawFile.size_bytes)).scalar() or 0
+    size_result = db.query(func.sum(RawFile.size_bytes)).scalar() or 0
     return {
         "total_bytes": size_result,
         "total_mb": round(size_result / (1024 * 1024), 2) if size_result else 0,
@@ -443,8 +442,7 @@ def get_storage_stats(db: Session = Depends(get_db)):
 @router.get("/system/extensions")
 def get_extension_stats(db: Session = Depends(get_db)):
     """Extension breakdown - can be loaded lazily."""
-    from sqlalchemy import func as sql_func
-    ext_counts = db.query(RawFile.extension, sql_func.count(RawFile.id)).group_by(RawFile.extension).order_by(sql_func.count(RawFile.id).desc()).limit(15).all()
+    ext_counts = db.query(RawFile.extension, func.count(RawFile.id)).group_by(RawFile.extension).order_by(func.count(RawFile.id).desc()).limit(15).all()
     return [{"ext": ext or "none", "count": count} for ext, count in ext_counts]
 
 
@@ -462,8 +460,6 @@ def get_recent_files(db: Session = Depends(get_db), limit: int = 10):
 @router.get("/system/metrics")
 def get_system_metrics(db: Session = Depends(get_db)):
     """Comprehensive system metrics."""
-    from sqlalchemy import func as sql_func
-    
     total_files = db.query(RawFile).count()
     processed_files = db.query(RawFile).filter(RawFile.status == 'ok').count()
     failed_files = db.query(RawFile).filter(RawFile.status == 'extract_failed').count()
@@ -471,15 +467,15 @@ def get_system_metrics(db: Session = Depends(get_db)):
     enriched_entries = db.query(Entry).filter(Entry.status == 'enriched').count()
     embedded_entries = db.query(Entry).filter(Entry.embedding.isnot(None)).count()
     pending_entries = db.query(Entry).filter(Entry.status == 'pending').count()
-    
+
     # Get recent activity - last 10 files
     recent_files = db.query(RawFile).order_by(RawFile.created_at.desc()).limit(10).all()
-    
+
     # Get file size stats
-    size_result = db.query(sql_func.sum(RawFile.size_bytes)).scalar() or 0
-    
+    size_result = db.query(func.sum(RawFile.size_bytes)).scalar() or 0
+
     # Get extension breakdown
-    ext_counts = db.query(RawFile.extension, sql_func.count(RawFile.id)).group_by(RawFile.extension).order_by(sql_func.count(RawFile.id).desc()).limit(10).all()
+    ext_counts = db.query(RawFile.extension, func.count(RawFile.id)).group_by(RawFile.extension).order_by(func.count(RawFile.id).desc()).limit(10).all()
     
     return {
         "files": {

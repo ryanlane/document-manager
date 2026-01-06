@@ -5,6 +5,7 @@ Handles files, entries, images, series, links, and enrichment configuration.
 import os
 import mimetypes
 import json
+import numpy as np
 from pathlib import Path
 from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,6 +19,7 @@ from src.db.models import RawFile, Entry
 from src.db.settings import get_setting
 from src.enrich.inherit_doc_metadata import inherit_doc_metadata_batch
 from src.extract.extractors import THUMBNAIL_DIR
+from src.llm_client import list_vision_models, VISION_MODEL, describe_image
 
 router = APIRouter(tags=["files"])
 
@@ -876,8 +878,6 @@ def inherit_metadata(db: Session = Depends(get_db)):
 @router.get("/vision/models")
 def get_vision_models():
     """Get available vision models."""
-    from src.llm_client import list_vision_models, VISION_MODEL
-    
     available = list_vision_models()
     return {
         "available": available,
@@ -888,8 +888,6 @@ def get_vision_models():
 @router.post("/images/{image_id}/analyze")
 async def analyze_image(image_id: int, model: Optional[str] = None, db: Session = Depends(get_db)):
     """Analyze an image with vision model."""
-    from src.llm_client import describe_image
-    
     image = db.query(RawFile).filter(RawFile.id == image_id, RawFile.file_type == 'image').first()
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -910,13 +908,11 @@ async def analyze_image(image_id: int, model: Optional[str] = None, db: Session 
 
 @router.post("/images/analyze-batch")
 async def analyze_images_batch(
-    image_ids: List[int], 
-    model: Optional[str] = None, 
+    image_ids: List[int],
+    model: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Analyze multiple images in batch."""
-    from src.llm_client import describe_image
-    
     results = []
     for image_id in image_ids:
         image = db.query(RawFile).filter(RawFile.id == image_id, RawFile.file_type == 'image').first()
@@ -1018,7 +1014,6 @@ def inspect_entry(entry_id: int, db: Session = Depends(get_db)):
 @router.get("/entries/{entry_id}/debug")
 def entry_debug_info(entry_id: int, db: Session = Depends(get_db)):
     """Get debug information for an entry including embedding details."""
-    import numpy as np
     
     entry = db.query(Entry).filter(Entry.id == entry_id).first()
     if not entry:
@@ -1080,7 +1075,6 @@ def get_nearby_entries(entry_id: int, k: int = 10, db: Session = Depends(get_db)
 @router.get("/entries/{entry_id}/embedding-viz")
 def get_entry_embedding_viz(entry_id: int, db: Session = Depends(get_db)):
     """Get entry embedding for visualization."""
-    import numpy as np
     
     entry = db.query(Entry).filter(Entry.id == entry_id).first()
     if not entry:

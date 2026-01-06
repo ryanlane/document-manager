@@ -11,6 +11,7 @@ This router handles both local worker process management and distributed worker 
 
 import json
 import os
+import subprocess
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -307,7 +308,6 @@ def get_worker_progress(db: Session = Depends(get_db)):
 @router.get("/worker/logs")
 def get_worker_logs(lines: int = 100):
     """Get the last N lines from the worker log file using tail for efficiency."""
-    import subprocess
     
     try:
         if not os.path.exists(WORKER_LOG_FILE):
@@ -356,7 +356,6 @@ def get_worker_logs(lines: int = 100):
 @router.post("/worker/logs/rotate")
 def rotate_worker_logs():
     """Rotate the worker log file - keeps last 10000 lines, archives the rest."""
-    import subprocess
     
     try:
         if not os.path.exists(WORKER_LOG_FILE):

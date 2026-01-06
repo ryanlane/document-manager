@@ -27,7 +27,6 @@ def test_list_files_with_data(client: TestClient, mock_db_session, sample_file):
     """Test listing files with sample data."""
     # Configure mock to return sample file
     def custom_query_mock(*args):
-        from unittest.mock import MagicMock
         query_mock = MagicMock()
         query_mock.filter.return_value = query_mock
         query_mock.order_by.return_value = query_mock

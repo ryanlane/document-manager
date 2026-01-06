@@ -71,8 +71,6 @@ async def test_connection(request: TestConnectionRequest):
     Test connection to a provider without saving.
     Used by the Add Provider wizard to validate before saving.
     """
-    import requests as http_requests
-    
     result = {
         "connected": False,
         "models": [],
@@ -84,7 +82,7 @@ async def test_connection(request: TestConnectionRequest):
         if request.provider_type == 'ollama':
             # Test Ollama connection
             url = request.url.rstrip('/')
-            resp = http_requests.get(f"{url}/api/tags", timeout=10)
+            resp = requests.get(f"{url}/api/tags", timeout=10)
             
             if resp.status_code == 200:
                 data = resp.json()
@@ -112,7 +110,7 @@ async def test_connection(request: TestConnectionRequest):
                 result["error"] = "API key required"
             else:
                 url = request.url or 'https://api.openai.com/v1'
-                resp = http_requests.get(
+                resp = requests.get(
                     f"{url}/models",
                     headers={"Authorization": f"Bearer {request.api_key}"},
                     timeout=10
@@ -134,7 +132,7 @@ async def test_connection(request: TestConnectionRequest):
             else:
                 url = request.url or 'https://api.anthropic.com'
                 # Anthropic doesn't have a models endpoint, do a minimal test
-                resp = http_requests.post(
+                resp = requests.post(
                     f"{url}/v1/messages",
                     headers={
                         "x-api-key": request.api_key,
@@ -165,9 +163,9 @@ async def test_connection(request: TestConnectionRequest):
         else:
             result["error"] = f"Unknown provider type: {request.provider_type}"
             
-    except http_requests.Timeout:
+    except requests.Timeout:
         result["error"] = "Connection timed out"
-    except http_requests.ConnectionError:
+    except requests.ConnectionError:
         result["error"] = "Connection refused - is the server running?"
     except Exception as e:
         result["error"] = str(e)[:200]
