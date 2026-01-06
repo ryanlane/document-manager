@@ -211,13 +211,13 @@ class Job(Base):
     )
 
 
-class OllamaServer(Base):
+class LLMProvider(Base):
     """
     Registry of LLM providers for distributed processing.
     Supports Ollama servers and cloud providers (OpenAI, Anthropic, etc.).
-    Originally named 'ollama_servers' but now serves as unified LLM providers table.
+    Renamed from OllamaServer to reflect support for multiple providers.
     """
-    __tablename__ = 'ollama_servers'
+    __tablename__ = 'llm_providers'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(Text, nullable=False, unique=True)
@@ -243,12 +243,12 @@ class OllamaServer(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationship to workers
-    workers = relationship("Worker", back_populates="ollama_server", cascade="all, delete-orphan")
+    workers = relationship("Worker", back_populates="llm_provider", cascade="all, delete-orphan")
 
     __table_args__ = (
-        Index('ollama_servers_status_idx', 'status'),
-        Index('ollama_servers_enabled_idx', 'enabled'),
-        Index('ollama_servers_provider_type_idx', 'provider_type'),
+        Index('llm_providers_status_idx', 'status'),
+        Index('llm_providers_enabled_idx', 'enabled'),
+        Index('llm_providers_provider_type_idx', 'provider_type'),
     )
 
 
@@ -261,7 +261,7 @@ class Worker(Base):
 
     id = Column(Text, primary_key=True)  # UUID or hostname-based ID
     name = Column(Text, nullable=False)
-    ollama_server_id = Column(Integer, ForeignKey('ollama_servers.id', ondelete='SET NULL'))
+    llm_provider_id = Column(Integer, ForeignKey('llm_providers.id', ondelete='SET NULL'))
     status = Column(Text, default='starting')  # 'starting', 'active', 'idle', 'stale', 'stopped'
     current_task = Column(Text)  # e.g., 'enriching doc #12345' or null
     current_phase = Column(Text)  # 'ingest', 'segment', 'enrich', 'embed', etc.
@@ -283,10 +283,10 @@ class Worker(Base):
     schedule_status = Column(Text)  # 'in_window', 'outside_window', 'paused_by_schedule'
     
     # Relationship to server
-    ollama_server = relationship("OllamaServer", back_populates="workers")
+    llm_provider = relationship("LLMProvider", back_populates="workers")
 
     __table_args__ = (
         Index('workers_status_idx', 'status'),
         Index('workers_last_heartbeat_idx', 'last_heartbeat'),
-        Index('workers_ollama_server_id_idx', 'ollama_server_id'),
+        Index('workers_llm_provider_id_idx', 'llm_provider_id'),
     )

@@ -10,7 +10,7 @@ import logging
 import requests
 
 from sqlalchemy.orm import Session
-from src.db.models import OllamaServer
+from src.db.models import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,28 +23,28 @@ PROVIDER_GOOGLE = 'google'
 CLOUD_PROVIDERS = [PROVIDER_OPENAI, PROVIDER_ANTHROPIC, PROVIDER_GOOGLE]
 
 
-def get_all_servers(db: Session, enabled_only: bool = False) -> List[OllamaServer]:
+def get_all_servers(db: Session, enabled_only: bool = False) -> List[LLMProvider]:
     """Get all registered Ollama servers."""
-    query = db.query(OllamaServer)
+    query = db.query(LLMProvider)
     if enabled_only:
-        query = query.filter(OllamaServer.enabled == True)
-    return query.order_by(OllamaServer.priority.desc(), OllamaServer.name).all()
+        query = query.filter(LLMProvider.enabled == True)
+    return query.order_by(LLMProvider.priority.desc(), LLMProvider.name).all()
 
 
-def get_server(db: Session, server_id: int) -> Optional[OllamaServer]:
+def get_server(db: Session, server_id: int) -> Optional[LLMProvider]:
     """Get a specific server by ID."""
-    return db.query(OllamaServer).filter(OllamaServer.id == server_id).first()
+    return db.query(LLMProvider).filter(LLMProvider.id == server_id).first()
 
 
-def get_server_by_name(db: Session, name: str) -> Optional[OllamaServer]:
+def get_server_by_name(db: Session, name: str) -> Optional[LLMProvider]:
     """Get a specific server by name."""
-    return db.query(OllamaServer).filter(OllamaServer.name == name).first()
+    return db.query(LLMProvider).filter(LLMProvider.name == name).first()
 
 
-def get_server_by_url(db: Session, url: str) -> Optional[OllamaServer]:
+def get_server_by_url(db: Session, url: str) -> Optional[LLMProvider]:
     """Get a specific server by URL."""
     normalized_url = url.rstrip('/')
-    return db.query(OllamaServer).filter(OllamaServer.url == normalized_url).first()
+    return db.query(LLMProvider).filter(LLMProvider.url == normalized_url).first()
 
 
 def create_server(
@@ -56,11 +56,11 @@ def create_server(
     provider_type: str = PROVIDER_OLLAMA,
     api_key: Optional[str] = None,
     default_model: Optional[str] = None
-) -> OllamaServer:
+) -> LLMProvider:
     """Create a new LLM provider entry."""
     normalized_url = url.rstrip('/')
     
-    server = OllamaServer(
+    server = LLMProvider(
         name=name,
         url=normalized_url,
         enabled=enabled,
@@ -88,7 +88,7 @@ def update_server(
     priority: Optional[int] = None,
     api_key: Optional[str] = None,
     default_model: Optional[str] = None
-) -> Optional[OllamaServer]:
+) -> Optional[LLMProvider]:
     """Update an existing provider's configuration."""
     server = get_server(db, server_id)
     if not server:
@@ -395,18 +395,18 @@ def check_all_servers_health(db: Session, enabled_only: bool = True) -> List[Dic
     return results
 
 
-def get_online_servers(db: Session) -> List[OllamaServer]:
+def get_online_servers(db: Session) -> List[LLMProvider]:
     """Get all online and enabled servers, sorted by priority."""
     return (
-        db.query(OllamaServer)
-        .filter(OllamaServer.enabled == True)
-        .filter(OllamaServer.status == "online")
-        .order_by(OllamaServer.priority.desc())
+        db.query(LLMProvider)
+        .filter(LLMProvider.enabled == True)
+        .filter(LLMProvider.status == "online")
+        .order_by(LLMProvider.priority.desc())
         .all()
     )
 
 
-def get_best_server_for_capability(db: Session, capability: str) -> Optional[OllamaServer]:
+def get_best_server_for_capability(db: Session, capability: str) -> Optional[LLMProvider]:
     """
     Get the best available server that has a specific capability.
     Returns the highest priority online server with that capability.
@@ -421,7 +421,7 @@ def get_best_server_for_capability(db: Session, capability: str) -> Optional[Oll
     return None
 
 
-def server_to_dict(server: OllamaServer, include_api_key: bool = False) -> Dict[str, Any]:
+def server_to_dict(server: LLMProvider, include_api_key: bool = False) -> Dict[str, Any]:
     """Convert server model to dictionary for API responses."""
     result = {
         "id": server.id,
@@ -458,22 +458,22 @@ def server_to_dict(server: OllamaServer, include_api_key: bool = False) -> Dict[
     return result
 
 
-def get_providers_by_type(db: Session, provider_type: str, enabled_only: bool = False) -> List[OllamaServer]:
+def get_providers_by_type(db: Session, provider_type: str, enabled_only: bool = False) -> List[LLMProvider]:
     """Get all providers of a specific type."""
-    query = db.query(OllamaServer).filter(OllamaServer.provider_type == provider_type)
+    query = db.query(LLMProvider).filter(LLMProvider.provider_type == provider_type)
     if enabled_only:
-        query = query.filter(OllamaServer.enabled == True)
-    return query.order_by(OllamaServer.priority.desc(), OllamaServer.name).all()
+        query = query.filter(LLMProvider.enabled == True)
+    return query.order_by(LLMProvider.priority.desc(), LLMProvider.name).all()
 
 
-def get_ollama_providers(db: Session, enabled_only: bool = False) -> List[OllamaServer]:
+def get_ollama_providers(db: Session, enabled_only: bool = False) -> List[LLMProvider]:
     """Get only Ollama providers (for workers)."""
     return get_providers_by_type(db, PROVIDER_OLLAMA, enabled_only)
 
 
-def get_cloud_providers(db: Session, enabled_only: bool = False) -> List[OllamaServer]:
+def get_cloud_providers(db: Session, enabled_only: bool = False) -> List[LLMProvider]:
     """Get only cloud providers (OpenAI, Anthropic, etc.)."""
-    query = db.query(OllamaServer).filter(OllamaServer.provider_type.in_(CLOUD_PROVIDERS))
+    query = db.query(LLMProvider).filter(LLMProvider.provider_type.in_(CLOUD_PROVIDERS))
     if enabled_only:
-        query = query.filter(OllamaServer.enabled == True)
-    return query.order_by(OllamaServer.priority.desc(), OllamaServer.name).all()
+        query = query.filter(LLMProvider.enabled == True)
+    return query.order_by(LLMProvider.priority.desc(), LLMProvider.name).all()

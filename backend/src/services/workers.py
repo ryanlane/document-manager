@@ -12,7 +12,7 @@ import os
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from src.db.models import Worker, OllamaServer
+from src.db.models import Worker, LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def get_workers_by_server(db: Session, server_id: int) -> List[Worker]:
     """Get all workers associated with a specific Ollama server."""
     return (
         db.query(Worker)
-        .filter(Worker.ollama_server_id == server_id)
+        .filter(Worker.llm_provider_id == server_id)
         .filter(Worker.status != STATUS_STOPPED)
         .all()
     )
@@ -101,15 +101,15 @@ def register_worker(
         return existing
     
     # Find Ollama server by URL if provided
-    ollama_server_id = None
+    llm_provider_id = None
     if ollama_url:
         normalized_url = ollama_url.rstrip('/')
-        server = db.query(OllamaServer).filter(OllamaServer.url == normalized_url).first()
+        server = db.query(LLMProvider).filter(LLMProvider.url == normalized_url).first()
         if server:
-            ollama_server_id = server.id
+            llm_provider_id = server.id
         else:
             # Auto-create server entry for this URL
-            server = OllamaServer(
+            server = LLMProvider(
                 name=f"auto-{worker_id[:8]}",
                 url=normalized_url,
                 enabled=True,
@@ -117,13 +117,13 @@ def register_worker(
             )
             db.add(server)
             db.flush()
-            ollama_server_id = server.id
+            llm_provider_id = server.id
             logger.info(f"Auto-created Ollama server for worker: {normalized_url}")
     
     worker = Worker(
         id=worker_id,
         name=name,
-        ollama_server_id=ollama_server_id,
+        llm_provider_id=llm_provider_id,
         status=STATUS_STARTING,
         managed=managed,
         last_heartbeat=datetime.now(timezone.utc),
@@ -291,9 +291,9 @@ def worker_to_dict(worker: Worker) -> Dict[str, Any]:
     """Convert worker model to dictionary for API responses."""
     server_name = None
     server_url = None
-    if worker.ollama_server:
-        server_name = worker.ollama_server.name
-        server_url = worker.ollama_server.url
+    if worker.llm_provider:
+        server_name = worker.llm_provider.name
+        server_url = worker.llm_provider.url
     
     return {
         "id": worker.id,
@@ -303,9 +303,11 @@ def worker_to_dict(worker: Worker) -> Dict[str, Any]:
         "current_phase": worker.current_phase,
         "stats": worker.stats or {},
         "managed": worker.managed,
-        "ollama_server_id": worker.ollama_server_id,
-        "ollama_server_name": server_name,
-        "ollama_server_url": server_url,
+        "llm_provider_id": worker.llm_provider_id,
+        "llm_provider_name": server_name,  # New field name
+        "llm_provider_url": server_url,     # New field name
+        "ollama_server_name": server_name,  # Keep for backward compatibility
+        "ollama_server_url": server_url,    # Keep for backward compatibility
         "config": worker.config or {},
         "last_heartbeat": worker.last_heartbeat.isoformat() if worker.last_heartbeat else None,
         "started_at": worker.started_at.isoformat() if worker.started_at else None
