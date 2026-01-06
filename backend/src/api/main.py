@@ -4,9 +4,17 @@ FastAPI application with modular routers for document management and RAG.
 """
 import os
 import json
+import logging
 from typing import Optional, Dict
 from fastapi import FastAPI
 from pydantic import BaseModel
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Import all routers
 from src.api.routers import (
@@ -85,8 +93,12 @@ def get_worker_state() -> Dict:
         if os.path.exists(WORKER_STATE_FILE):
             with open(WORKER_STATE_FILE, 'r') as f:
                 return {**default_state, **json.load(f)}
-    except Exception:
-        pass
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse worker state file: {e}")
+    except IOError as e:
+        logger.error(f"Failed to read worker state file: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error reading worker state: {e}")
     return default_state
 
 
@@ -97,8 +109,10 @@ def set_worker_state(updates: Dict) -> Dict:
     try:
         with open(WORKER_STATE_FILE, 'w') as f:
             json.dump(state, f, indent=2)
+    except IOError as e:
+        logger.error(f"Failed to write worker state file: {e}")
     except Exception as e:
-        print(f"Failed to write worker state: {e}")
+        logger.error(f"Unexpected error writing worker state: {e}")
     return state
 
 

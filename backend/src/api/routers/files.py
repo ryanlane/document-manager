@@ -214,10 +214,15 @@ async def get_file_text_preview(file_id: int, db: Session = Depends(get_db)):
                             # If all encodings fail, use utf-8 with replace
                             with open(str(file_path), 'r', encoding='utf-8', errors='replace') as f:
                                 text_content = f.read()
-                    except:
+                    except IOError as io_error:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Could not read .doc file: {str(io_error)}"
+                        )
+                    except Exception as final_error:
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Could not extract text from .doc file (tried python-docx, Tika, and plain text): {str(docx_error)}"
+                            detail=f"Could not extract text from .doc file (tried python-docx, Tika, and plain text). Original error: {str(docx_error)}, Final error: {str(final_error)}"
                         )
 
         elif extension == '.rtf':
@@ -265,7 +270,14 @@ async def get_file_text_preview(file_id: int, db: Session = Depends(get_db)):
             "extension": extension
         }
 
+    except HTTPException:
+        # Re-raise HTTP exceptions from inner code
+        raise
     except Exception as e:
+        # Log unexpected errors for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error extracting text from {file.filename} (id={file_id}): {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to extract text: {str(e)}"

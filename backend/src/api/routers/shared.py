@@ -3,6 +3,9 @@ Shared utilities and constants for API routers.
 """
 import os
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Shared directory paths (shared with worker_loop.py)
 if os.path.exists("/app/shared"):
@@ -38,8 +41,12 @@ def get_worker_state():
         if os.path.exists(WORKER_STATE_FILE):
             with open(WORKER_STATE_FILE, 'r') as f:
                 return {**default_state, **json.load(f)}
-    except Exception:
-        pass
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse worker state file: {e}")
+    except IOError as e:
+        logger.error(f"Failed to read worker state file: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error reading worker state: {e}")
     return default_state
 
 
@@ -49,7 +56,11 @@ def save_worker_state(state):
         with open(WORKER_STATE_FILE, 'w') as f:
             json.dump(state, f)
         return True
-    except Exception:
+    except IOError as e:
+        logger.error(f"Failed to write worker state file: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error writing worker state: {e}")
         return False
 
 
