@@ -1,0 +1,64 @@
+/* Recent Files Section Component */
+.recentSection {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+}
+
+.recentSection h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: 1rem;
+}
+
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.recentItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.2s;
+}
+
+.recentItem:hover {
+  background: var(--color-border);
+}
+
+.recentName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+}
+
+.recentStatus {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.recentStatus.ok {
+  background: rgba(66, 184, 131, 0.15);
+  color: var(--color-success);
+}
+
+.recentStatus.extract_failed {
+  background: rgba(255, 100, 100, 0.15);
+  color: var(--color-error);
+}
+
+.recentStatus.pending {
+  background: rgba(255, 197, 23, 0.15);
+  color: #ffc517;
+}

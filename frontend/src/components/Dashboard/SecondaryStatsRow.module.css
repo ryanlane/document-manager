@@ -1,0 +1,67 @@
+/* Secondary Stats Row Component */
+.secondaryRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.miniCard {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.miniCard > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.miniLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.miniValue {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+.extPills {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.extPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.extPill strong {
+  color: var(--color-text);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .secondaryRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .extPills {
+    margin-left: 0;
+    justify-content: center;
+  }
+}
