@@ -16,6 +16,7 @@ function Home() {
   const [showExplainer, setShowExplainer] = useState(false)
   const [searchMode, setSearchMode] = useState(localStorage.getItem('search_mode') || 'hybrid')
   const [searchExplanation, setSearchExplanation] = useState(null)
+  const [numResults, setNumResults] = useState(parseInt(localStorage.getItem('num_results') || '10', 10))
   const [filters, setFilters] = useState({
     author: '',
     tags: '',
@@ -88,8 +89,8 @@ function Home() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query,
-            k: 5,
-            stage1_docs: 20,
+            k: numResults,
+            stage1_docs: Math.max(20, numResults * 2),
             filters: Object.keys(activeFilters).length > 0 ? activeFilters : null
           })
         })
@@ -144,7 +145,7 @@ function Home() {
       } else {
         // Fetch explained search results if explainer is on
         if (showExplainer) {
-          const explainRes = await fetch(`/api/search/explain?query=${encodeURIComponent(query)}&k=5&mode=${searchMode}`)
+          const explainRes = await fetch(`/api/search/explain?query=${encodeURIComponent(query)}&k=${numResults}&mode=${searchMode}`)
           const explainData = await explainRes.json()
           setSearchExplanation(explainData)
         }
@@ -156,7 +157,7 @@ function Home() {
           },
           body: JSON.stringify({ 
             query, 
-            k: 5,
+            k: numResults,
             model: selectedModel,
             filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
             search_mode: searchMode
@@ -228,6 +229,23 @@ function Home() {
           >
             <Info size={14} /> {showExplainer ? 'Hide Explainer' : 'Explain Search'}
           </button>
+
+          <select
+            value={numResults}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10)
+              setNumResults(val)
+              localStorage.setItem('num_results', val.toString())
+            }}
+            className={styles.modelSelect}
+            title="Number of results"
+          >
+            <option value="5">5 results</option>
+            <option value="10">10 results</option>
+            <option value="15">15 results</option>
+            <option value="20">20 results</option>
+            <option value="30">30 results</option>
+          </select>
 
           {status && status.ollama.available_models && (
             <select 

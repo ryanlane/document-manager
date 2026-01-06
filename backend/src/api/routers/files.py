@@ -17,6 +17,7 @@ from src.db.session import get_db
 from src.db.models import RawFile, Entry
 from src.db.settings import get_setting
 from src.enrich.inherit_doc_metadata import inherit_doc_metadata_batch
+from src.extract.extractors import THUMBNAIL_DIR
 
 router = APIRouter(tags=["files"])
 
@@ -530,10 +531,13 @@ def serve_thumbnail(image_id: int, db: Session = Depends(get_db)):
     if not image or not image.thumbnail_path:
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     
-    if not os.path.exists(image.thumbnail_path):
+    # thumbnail_path in DB is just the filename; construct full path
+    full_thumbnail_path = os.path.join(THUMBNAIL_DIR, image.thumbnail_path)
+    
+    if not os.path.exists(full_thumbnail_path):
         raise HTTPException(status_code=404, detail="Thumbnail file missing")
     
-    return FileResponse(image.thumbnail_path, media_type="image/jpeg")
+    return FileResponse(full_thumbnail_path, media_type="image/jpeg")
 
 
 @router.get("/images/{image_id}/full")

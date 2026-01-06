@@ -4,7 +4,7 @@ Handles semantic search, RAG (ask/chat), and similarity calculations.
 """
 import os
 import numpy as np
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -12,9 +12,8 @@ from pydantic import BaseModel
 
 from src.db.session import get_db
 from src.db.models import Entry, RawFile
-from src.db.settings import get_setting
 from src.llm_client import embed_text, generate_text, MODEL
-from src.rag.search import search_entries_semantic, search_two_stage, SEARCH_MODE_HYBRID
+from src.rag.search import search_entries_semantic, search_two_stage
 
 router = APIRouter(tags=["search"])
 
@@ -27,14 +26,14 @@ class AskRequest(BaseModel):
     query: str
     k: int = 5
     model: Optional[str] = None
-    filters: Optional[Dict] = None
+    filters: dict = {}
     search_mode: Optional[str] = 'hybrid'
     vector_weight: Optional[float] = 0.7
 
 
 class AskResponse(BaseModel):
     answer: str
-    sources: List[dict]
+    sources: list
 
 
 class ChatMessage(BaseModel):
@@ -43,7 +42,7 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
+    messages: list[ChatMessage]
     model: Optional[str] = None
 
 
@@ -61,40 +60,53 @@ class TwoStageSearchRequest(BaseModel):
     query: str
     k: int = 10
     stage1_docs: int = 20
-    filters: Dict = {}
+    filters: dict = {}
+
 
 # ============================================================================
-# RAG Endpoints  
+# RAG Endpoints
 # ============================================================================
 
 @router.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest, db: Session = Depends(get_db)):
     """Answer questions using semantic search and LLM generation."""
+    # 1. Search with configurable mode
     search_mode = request.search_mode or 'hybrid'
     vector_weight = request.vector_weight or 0.7
-
+    
     results = search_entries_semantic(
-        db, request.query, k=request.k, filters=request.filters,
-        mode=search_mode, vector_weight=vector_weight
+        db, 
+        request.query, 
+        k=request.k, 
+        filters=request.filters,
+        mode=search_mode,
+        vector_weight=vector_weight
     )
-
+    
     if not results:
         return AskResponse(answer="I couldn't find any relevant documents in the archive.", sources=[])
-
+    
+    # 2. Build Context
     context_parts = []
     sources = []
     for i, entry in enumerate(results):
+        # Fallback to filename if title is missing
         title = entry.title
         if not title and entry.raw_file:
+            # Use filename without extension
             title = os.path.splitext(entry.raw_file.filename)[0]
-
+            
         context_parts.append(f"Document {i+1}:\nTitle: {title}\nContent: {entry.entry_text}\n")
         sources.append({
-            "id": entry.id, "file_id": entry.file_id, "title": title,
+            "id": entry.id,
+            "file_id": entry.file_id,
+            "title": title,
             "path": entry.raw_file.path if entry.raw_file else None
         })
-
+    
     context = "\n".join(context_parts)
+    
+    # 3. Prompt
     prompt = f"""You are my personal archive assistant.
 Use ONLY the following documents to answer the question.
 If the answer is not in these documents, say "I can't find that in this archive."
@@ -105,18 +117,20 @@ Documents:
 Question: {request.query}
 """
 
+    # 4. Generate
     model_to_use = request.model if request.model else MODEL
     answer = generate_text(prompt, model=model_to_use)
-
+    
     if not answer:
         raise HTTPException(status_code=500, detail="Failed to generate answer")
-
+        
     return AskResponse(answer=answer, sources=sources)
 
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     """Simple chat endpoint for direct LLM interaction."""
+    # Build prompt from messages
     prompt_parts = []
     for msg in request.messages:
         if msg.role == 'system':
@@ -125,14 +139,16 @@ def chat(request: ChatRequest):
             prompt_parts.append(msg.content)
         elif msg.role == 'assistant':
             prompt_parts.append(f"Assistant: {msg.content}")
-
+    
     prompt = "\n\n".join(prompt_parts)
+    
+    # Use requested model or default
     model_to_use = request.model if request.model else MODEL
     response = generate_text(prompt, model=model_to_use)
-
+    
     if not response:
         raise HTTPException(status_code=500, detail="Failed to generate response")
-
+    
     return ChatResponse(response=response, model=model_to_use)
 
 
@@ -141,30 +157,44 @@ def chat(request: ChatRequest):
 # ============================================================================
 
 @router.get("/search/explain")
-def search_with_explanation(query: str, k: int = 5, mode: str = 'hybrid', db: Session = Depends(get_db)):
+def search_with_explanation(
+    query: str,
+    k: int = 10,
+    mode: str = 'hybrid',
+    db: Session = Depends(get_db)
+):
     """Search with detailed explanation of scores and matches."""
+    # Get query embedding
     query_embedding = embed_text(query)
     if not query_embedding:
         raise HTTPException(status_code=500, detail="Failed to embed query")
-
+    
+    # Perform search
     results = search_entries_semantic(db, query, k=k, mode=mode)
-
+    
     explained_results = []
     for entry in results:
+        # Calculate individual scores
         vector_score = None
+        
         if entry.embedding is not None:
+            # Calculate vector similarity
             entry_emb = np.array(entry.embedding)
             query_emb = np.array(query_embedding)
             vector_score = float(np.dot(entry_emb, query_emb) / (np.linalg.norm(entry_emb) * np.linalg.norm(query_emb)))
-
+        
+        # Check for keyword matches
         query_words = set(query.lower().split())
         text_words = set((entry.entry_text or '').lower().split()[:500])
         title_words = set((entry.title or '').lower().split())
         matching_words = query_words & (text_words | title_words)
-
+        
         explained_results.append({
-            "id": entry.id, "title": entry.title, "summary": entry.summary,
-            "category": entry.category, "author": entry.author,
+            "id": entry.id,
+            "title": entry.title,
+            "summary": entry.summary,
+            "category": entry.category,
+            "author": entry.author,
             "scores": {
                 "vector_similarity": round(vector_score, 4) if vector_score else None,
                 "combined": getattr(entry, '_search_scores', {}).get('combined_score'),
@@ -176,9 +206,11 @@ def search_with_explanation(query: str, k: int = 5, mode: str = 'hybrid', db: Se
             },
             "file_path": entry.raw_file.path if entry.raw_file else None
         })
-
+    
     return {
-        "query": query, "search_mode": mode, "result_count": len(explained_results),
+        "query": query,
+        "search_mode": mode,
+        "result_count": len(explained_results),
         "results": explained_results,
         "explanation": {
             "vector_search": "Converts query to 768-dimensional embedding and finds entries with similar semantic meaning.",
@@ -189,25 +221,42 @@ def search_with_explanation(query: str, k: int = 5, mode: str = 'hybrid', db: Se
 
 
 @router.post("/search/two-stage")
-def search_two_stage_endpoint(request: TwoStageSearchRequest, db: Session = Depends(get_db)):
-    """Two-stage retrieval for large collections."""
+def search_two_stage_endpoint(
+    request: TwoStageSearchRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Two-stage retrieval for large collections.
+    
+    Stage 1: Search doc-level embeddings to find relevant documents (fast, ~125k docs).
+    Stage 2: Search chunk-level embeddings within top N docs (precise, filtered set).
+    """
     result = search_two_stage(
-        db=db, query=request.query, k=request.k,
-        stage1_docs=request.stage1_docs, filters=request.filters
+        db=db,
+        query=request.query,
+        k=request.k,
+        stage1_docs=request.stage1_docs,
+        filters=request.filters
     )
-
+    
+    # Serialize entries
     entries = []
     for entry in result.get('entries', []):
         entries.append({
-            "id": entry.id, "title": entry.title, "summary": entry.summary,
-            "category": entry.category, "author": entry.author, "tags": entry.tags,
+            "id": entry.id,
+            "title": entry.title,
+            "summary": entry.summary,
+            "category": entry.category,
+            "author": entry.author,
+            "tags": entry.tags,
             "entry_text": entry.entry_text[:500] if entry.entry_text else None,
             "doc_id": entry.file_id,
             "file_path": entry.raw_file.path if entry.raw_file else None
         })
-
+    
     return {
-        "query": request.query, "search_mode": "two_stage",
+        "query": request.query,
+        "search_mode": "two_stage",
         "stages": {
             "stage1": {
                 "docs_searched": "~125k doc-level embeddings",
@@ -230,25 +279,30 @@ def search_two_stage_endpoint(request: TwoStageSearchRequest, db: Session = Depe
 
 @router.post("/similarity")
 def calculate_similarity(request: SimilarityRequest):
-    """Calculate cosine similarity between two pieces of text."""
+    """
+    Calculate cosine similarity between two pieces of text.
+    Educational tool to demonstrate how semantic search works.
+    """
     if not request.text1.strip() or not request.text2.strip():
         raise HTTPException(status_code=400, detail="Both texts are required")
-
+    
+    # Get embeddings for both texts
     emb1 = embed_text(request.text1)
     emb2 = embed_text(request.text2)
-
+    
     if not emb1 or not emb2:
         raise HTTPException(status_code=500, detail="Failed to generate embeddings")
-
+    
+    # Calculate cosine similarity
     emb1 = np.array(emb1)
     emb2 = np.array(emb2)
-
+    
     dot_product = np.dot(emb1, emb2)
     norm1 = np.linalg.norm(emb1)
     norm2 = np.linalg.norm(emb2)
-
+    
     similarity = dot_product / (norm1 * norm2)
-
+    
     return {
         "similarity": float(similarity),
         "text1_length": len(request.text1),
@@ -257,60 +311,20 @@ def calculate_similarity(request: SimilarityRequest):
     }
 
 
-@router.get("/embeddings/stats")
-def get_embedding_stats(db: Session = Depends(get_db)):
-    """Get statistics about embeddings in the database."""
-    try:
-        result = db.execute(text("""
-            SELECT COUNT(*) as total_entries, COUNT(embedding) as embedded_entries,
-                   COUNT(*) - COUNT(embedding) as missing_embeddings
-            FROM entries
-        """)).fetchone()
-
-        doc_result = db.execute(text("""
-            SELECT COUNT(*) as total_docs, COUNT(doc_embedding) as embedded_docs,
-                   COUNT(*) - COUNT(doc_embedding) as missing_doc_embeddings
-            FROM raw_files
-        """)).fetchone()
-
-        dim_result = db.execute(text("""
-            SELECT vector_dims(embedding) FROM entries
-            WHERE embedding IS NOT NULL LIMIT 1
-        """)).fetchone()
-        embedding_dim = dim_result[0] if dim_result else None
-
-        llm_settings = get_setting(db, "llm") or {}
-        embed_model = llm_settings.get("ollama", {}).get("embedding_model", "nomic-embed-text")
-
-        return {
-            "entries": {
-                "total": result[0], "embedded": result[1], "missing": result[2],
-                "progress_pct": round((result[1] / result[0] * 100) if result[0] > 0 else 0, 2)
-            },
-            "documents": {
-                "total": doc_result[0], "embedded": doc_result[1], "missing": doc_result[2],
-                "progress_pct": round((doc_result[1] / doc_result[0] * 100) if doc_result[0] > 0 else 0, 2)
-            },
-            "embedding_dim": embedding_dim,
-            "model": embed_model
-        }
-    except Exception as e:
-        return {
-            "entries": {"total": 0, "embedded": 0, "missing": 0, "progress_pct": 0},
-            "documents": {"total": 0, "embedded": 0, "missing": 0, "progress_pct": 0},
-            "embedding_dim": None,
-            "model": "Unknown",
-            "error": str(e)
-        }
-
-
 @router.get("/embeddings/visualize")
 def visualize_embeddings(
-    source: str = 'entries', algorithm: str = 'umap', dimensions: int = 2,
-    limit: int = 1000, category: Optional[str] = None, author: Optional[str] = None,
+    source: str = 'entries',
+    algorithm: str = 'umap',
+    dimensions: int = 2,
+    limit: int = 1000,
+    category: Optional[str] = None,
+    author: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Generate 2D or 3D visualization of embeddings using TSNE or UMAP."""
+    """
+    Generate 2D or 3D visualization of embeddings using TSNE or UMAP.
+    Useful for exploring the semantic space of your documents.
+    """
     try:
         from sklearn.manifold import TSNE
         from umap import UMAP
@@ -319,65 +333,92 @@ def visualize_embeddings(
             status_code=501,
             detail="Visualization requires sklearn and umap-learn. Install with: pip install scikit-learn umap-learn"
         )
-
-    if dimensions not in [2, 3]:
-        raise HTTPException(status_code=400, detail="dimensions must be 2 or 3")
-    if algorithm not in ['tsne', 'umap']:
-        raise HTTPException(status_code=400, detail="algorithm must be 'tsne' or 'umap'")
-    if source not in ['docs', 'entries']:
-        raise HTTPException(status_code=400, detail="source must be 'docs' or 'entries'")
-
+    
     embeddings = []
     metadata = []
-
+    
+    # Collect embeddings
     if source == 'docs':
-        query = db.query(RawFile).filter(RawFile.doc_embedding.isnot(None))
+        # Use doc-level embeddings
+        query = db.query(RawFile).filter(
+            RawFile.doc_embedding.isnot(None)
+        )
+        
         if category:
-            query = query.filter(RawFile.meta_json['doc_category'].astext == category)
+            query = query.filter(RawFile.extra_meta['doc_category'].astext == category)
+        
         files = query.limit(limit).all()
-
+        
         for file in files:
             if file.doc_embedding and len(file.doc_embedding) > 0:
                 embeddings.append(file.doc_embedding)
+                
                 metadata.append({
-                    "file_id": file.id, "title": file.filename,
-                    "category": file.meta_json.get('doc_category', 'Unknown') if file.meta_json else 'Unknown',
-                    "author": file.meta_json.get('doc_author', 'Unknown') if file.meta_json else 'Unknown',
-                    "file_type": file.extension, "filename": file.filename,
+                    "file_id": file.id,
+                    "title": file.filename,
+                    "category": file.extra_meta.get('doc_category', 'Unknown') if file.extra_meta else 'Unknown',
+                    "author": file.extra_meta.get('doc_author', 'Unknown') if file.extra_meta else 'Unknown',
+                    "file_type": file.extension,
+                    "filename": file.filename,
                     "summary": (file.doc_summary or "")[:100] if file.doc_summary else ""
                 })
     else:
-        query = db.query(Entry).filter(Entry.embedding.isnot(None))
+        # Use entry-level embeddings
+        query = db.query(Entry).filter(
+            Entry.embedding.isnot(None)
+        )
+        
         if category:
             query = query.filter(Entry.category == category)
         if author:
             query = query.filter(Entry.author == author)
+        
         entries = query.limit(limit).all()
-
+        
         for entry in entries:
             if entry.embedding is not None and len(entry.embedding) > 0:
                 embeddings.append(entry.embedding)
+                
+                # Get file info
                 raw_file = db.query(RawFile).filter(RawFile.id == entry.file_id).first()
+                
                 metadata.append({
-                    "entry_id": entry.id, "title": entry.title or "Untitled",
-                    "category": entry.category or "Unknown", "author": entry.author or "Unknown",
+                    "entry_id": entry.id,
+                    "title": entry.title or "Untitled",
+                    "category": entry.category or "Unknown",
+                    "author": entry.author or "Unknown",
                     "file_type": raw_file.extension if raw_file else "unknown",
                     "filename": raw_file.filename if raw_file else "",
                     "summary": (entry.summary or "")[:100]
                 })
-
+    
     if len(embeddings) < 2:
-        return {"error": f"Not enough {source} with embeddings", "count": len(embeddings), "points": []}
-
+        return {
+            "error": f"Not enough {source} with embeddings",
+            "count": len(embeddings),
+            "points": []
+        }
+    
+    # Convert to numpy array
     embeddings_array = np.array(embeddings)
-
+    
+    # Perform dimensionality reduction
     if algorithm == 'tsne':
-        reducer = TSNE(n_components=dimensions, random_state=42, perplexity=min(30, len(embeddings) - 1))
-    else:
-        reducer = UMAP(n_components=dimensions, random_state=42, n_neighbors=min(15, len(embeddings) - 1))
-
+        reducer = TSNE(
+            n_components=dimensions,
+            random_state=42,
+            perplexity=min(30, len(embeddings) - 1)
+        )
+    else:  # umap
+        reducer = UMAP(
+            n_components=dimensions,
+            random_state=42,
+            n_neighbors=min(15, len(embeddings) - 1)
+        )
+    
     reduced = reducer.fit_transform(embeddings_array)
-
+    
+    # Combine with metadata
     points = []
     for i, coords in enumerate(reduced):
         point = metadata[i].copy()
@@ -386,14 +427,18 @@ def visualize_embeddings(
         if dimensions == 3:
             point['z'] = float(coords[2])
         points.append(point)
-
+    
+    # Get unique categories and authors for legend
     categories = list(set(p['category'] for p in points if p['category']))
     authors = list(set(p['author'] for p in points if p['author']))
     file_types = list(set(p['file_type'] for p in points if p['file_type']))
-
+    
     return {
-        "points": points, "count": len(points), "dimensions": dimensions,
-        "algorithm": algorithm, "source": source,
+        "points": points,
+        "count": len(points),
+        "dimensions": dimensions,
+        "algorithm": algorithm,
+        "source": source,
         "categories": sorted(categories),
         "authors": sorted(authors),
         "file_types": sorted(file_types)

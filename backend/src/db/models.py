@@ -271,6 +271,9 @@ class Worker(Base):
     
     # Worker configuration (what phases it handles)
     config = Column(JSONB)  # {phases: ['ingest', 'segment', 'enrich', 'embed'], batch_size: 100}
+
+    # Real-time progress tracking for each phase
+    progress = Column(JSONB)  # {phase_name: {current: int, total: int, status: str, updated_at: float}}
     
     # Scheduling support (migration 009)
     schedule_type = Column(Text, default='always_on')  # 'always_on', 'use_default', 'custom', 'always_off'

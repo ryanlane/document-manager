@@ -49,6 +49,7 @@ from src.db.session import SessionLocal
 from src.db.settings import get_llm_config
 from src.llm_client import set_default_client, ensure_models_available
 from src.services import workers as workers_service
+from src.services.worker_state import WorkerState
 
 # Re-apply file handler to root logger AFTER imports (child modules may have altered config)
 root_logger = logging.getLogger()

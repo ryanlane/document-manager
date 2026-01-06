@@ -299,7 +299,7 @@ def search_two_stage(
     }
 
 
-def search_keyword_only(db: Session, query: str, k: int = 5, filters: dict = None) -> List[dict]:
+def search_keyword_only(db: Session, query: str, k: int = 10, filters: dict = None) -> List[dict]:
     """
     Perform keyword-only search using PostgreSQL full-text search (BM25-like).
     Returns list of dicts with entry and rank score.

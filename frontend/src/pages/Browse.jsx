@@ -75,7 +75,7 @@ function Browse() {
       const skip = (filesPage - 1) * filesLimit
       const res = await fetch(`/api/files?skip=${skip}&limit=${filesLimit}`)
       const data = await res.json()
-      setFiles(data.items || [])
+      setFiles(data.files || [])
       setFilesTotal(data.total || 0)
     } catch (err) {
       console.error('Failed to fetch files:', err)
