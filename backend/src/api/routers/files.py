@@ -597,21 +597,36 @@ def re_enrich_entry(entry_id: int, db: Session = Depends(get_db)):
 
 @router.get("/images")
 def list_images(
-    skip: int = 0, 
-    limit: int = 50, 
+    skip: int = 0,
+    limit: int = 50,
     has_description: Optional[bool] = None,
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: Session = Depends(get_db)
 ):
-    """List all image files with optional filters."""
+    """List all image files with optional filters and sorting."""
     query = db.query(RawFile).filter(RawFile.file_type == 'image')
-    
+
     if has_description is True:
         query = query.filter(RawFile.vision_description.isnot(None))
     elif has_description is False:
         query = query.filter(RawFile.vision_description.is_(None))
-    
+
+    # Apply sorting
+    sort_column = {
+        'created_at': RawFile.created_at,
+        'modified_at': RawFile.mtime,
+        'filename': RawFile.filename,
+        'size': RawFile.size_bytes,
+    }.get(sort_by, RawFile.created_at)
+
+    if sort_dir == 'desc':
+        query = query.order_by(sort_column.desc())
+    else:
+        query = query.order_by(sort_column.asc())
+
     total = query.count()
-    images = query.order_by(RawFile.id.desc()).offset(skip).limit(limit).all()
+    images = query.offset(skip).limit(limit).all()
     
     return {
         "total": total,

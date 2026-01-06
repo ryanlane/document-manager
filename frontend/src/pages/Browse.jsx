@@ -23,7 +23,8 @@ function Browse() {
   
   const [activeTab, setActiveTab] = useState(initialTab)
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
-  const [sortBy, setSortBy] = useState('created_at-desc') // Sort option
+  const [sortBy, setSortBy] = useState('created_at-desc') // Sort option for files
+  const [imageSortBy, setImageSortBy] = useState('created_at-desc') // Sort option for images
   
   // Files state
   const [files, setFiles] = useState([])
@@ -90,10 +91,11 @@ function Browse() {
   const fetchImages = useCallback(async () => {
     setImagesLoading(true)
     try {
-      let url = `/api/images?skip=${imagesPage * imagesLimit}&limit=${imagesLimit}`
+      const [sortField, sortDir] = imageSortBy.split('-')
+      let url = `/api/images?skip=${imagesPage * imagesLimit}&limit=${imagesLimit}&sort_by=${sortField}&sort_dir=${sortDir}`
       if (imageFilter === 'with-description') url += '&has_description=true'
       else if (imageFilter === 'without-description') url += '&has_description=false'
-      
+
       const res = await fetch(url)
       const data = await res.json()
       setImages(data.items || [])
@@ -103,7 +105,7 @@ function Browse() {
     } finally {
       setImagesLoading(false)
     }
-  }, [imagesPage, imageFilter])
+  }, [imagesPage, imageFilter, imageSortBy])
 
   const fetchVisionModels = useCallback(async () => {
     try {
@@ -357,6 +359,27 @@ function Browse() {
       {/* Images Tab Content */}
       {activeTab === TABS.IMAGES && (
         <div className={styles.content}>
+          {/* Controls Bar */}
+          <div className={styles.controls}>
+            <div className={styles.controlsLeft}>
+              <Filter size={16} />
+              <select
+                value={imageSortBy}
+                onChange={(e) => setImageSortBy(e.target.value)}
+                className={styles.sortSelect}
+              >
+                <option value="created_at-desc">Newest First (Added to DB)</option>
+                <option value="created_at-asc">Oldest First (Added to DB)</option>
+                <option value="modified_at-desc">Recently Modified</option>
+                <option value="modified_at-asc">Least Recently Modified</option>
+                <option value="filename-asc">Filename (A-Z)</option>
+                <option value="filename-desc">Filename (Z-A)</option>
+                <option value="size-desc">Largest First</option>
+                <option value="size-asc">Smallest First</option>
+              </select>
+            </div>
+          </div>
+
           {imagesLoading ? (
             <div className={styles.imageGrid}>
               {[...Array(12)].map((_, i) => (
