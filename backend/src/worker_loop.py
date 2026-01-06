@@ -108,20 +108,19 @@ def register_worker():
     worker_id = get_or_create_worker_id()
     
     try:
-        db = SessionLocal()
-        worker = workers_service.register_worker(
-            db,
-            worker_id=worker_id,
-            name=WORKER_NAME,
-            ollama_url=OLLAMA_URL,
-            config={
-                "phases": ["ingest", "segment", "enrich", "enrich_docs", "embed", "embed_docs"]
-            },
-            managed=False  # Docker compose workers are considered external
-        )
-        db.close()
-        logger.info(f"Registered as worker: {worker_id}")
-        return worker
+        with SessionLocal() as db:
+            worker = workers_service.register_worker(
+                db,
+                worker_id=worker_id,
+                name=WORKER_NAME,
+                ollama_url=OLLAMA_URL,
+                config={
+                    "phases": ["ingest", "segment", "enrich", "enrich_docs", "embed", "embed_docs"]
+                },
+                managed=False  # Docker compose workers are considered external
+            )
+            logger.info(f"Registered as worker: {worker_id}")
+            return worker
     except Exception as e:
         logger.warning(f"Failed to register worker: {e}")
         return None
@@ -138,16 +137,15 @@ def send_heartbeat(status: str = "active", current_phase: str = None, current_ta
             "cpu_percent": psutil.Process().cpu_percent()
         }
         
-        db = SessionLocal()
-        workers_service.heartbeat(
-            db,
-            worker_id=worker_id,
-            status=status,
-            current_task=current_task,
-            current_phase=current_phase,
-            stats=stats
-        )
-        db.close()
+        with SessionLocal() as db:
+            workers_service.heartbeat(
+                db,
+                worker_id=worker_id,
+                status=status,
+                current_task=current_task,
+                current_phase=current_phase,
+                stats=stats
+            )
     except Exception as e:
         logger.warning(f"Failed to send heartbeat: {e}")
 
@@ -157,9 +155,8 @@ def deregister_worker():
     worker_id = get_or_create_worker_id()
     
     try:
-        db = SessionLocal()
-        workers_service.deregister_worker(db, worker_id)
-        db.close()
+        with SessionLocal() as db:
+            workers_service.deregister_worker(db, worker_id)
         logger.info(f"Deregistered worker: {worker_id}")
     except Exception as e:
         logger.warning(f"Failed to deregister worker: {e}")
@@ -311,8 +308,8 @@ def run_pipeline():
         # Refresh LLM client config from database settings
         if current_time - last_config_refresh > CONFIG_REFRESH_INTERVAL:
             try:
-                db = SessionLocal()
-                llm_config = get_llm_config(db)
+                with SessionLocal() as db:
+                    llm_config = get_llm_config(db)
                 
                 # Ensure required models are available (auto-pull if missing)
                 if llm_config.get('provider') == 'ollama':
@@ -320,7 +317,6 @@ def run_pipeline():
                 
                 set_default_client(llm_config)
                 logger.info(f"Refreshed LLM config: provider={llm_config.get('provider')}, model={llm_config.get('model')}")
-                db.close()
                 last_config_refresh = current_time
             except Exception as e:
                 logger.warning(f"Failed to refresh LLM config: {e}")

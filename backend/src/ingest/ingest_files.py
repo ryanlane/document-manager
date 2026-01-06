@@ -409,6 +409,7 @@ def main():
         current_file=""
     )
     logger.info(f"Ingest complete: {new_files} new, {updated_files} updated, {skipped_files} skipped, {errors} errors")
+    db.close()
 
 if __name__ == "__main__":
     main()

@@ -4,7 +4,9 @@
       "Bash(python3:*)",
       "Bash(docker-compose exec:*)",
       "Bash(curl:*)",
-      "Bash(docker-compose ps:*)"
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose restart:*)"
     ]
   }
 }

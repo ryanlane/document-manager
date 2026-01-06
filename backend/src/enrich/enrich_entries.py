@@ -318,31 +318,30 @@ def enrich_entry_worker(entry_id: int) -> tuple:
 
 
 def main():
-    db = next(get_db())
-    
-    # Get total pending count for progress tracking
-    from sqlalchemy import or_
-    total_pending = db.query(func.count(Entry.id)).filter(
-        Entry.status == 'pending',
-        or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
-    ).scalar()
-    
-    # Process pending entries that haven't exceeded max retries
-    entries = db.query(Entry).filter(
-        Entry.status == 'pending',
-        or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
-    ).limit(ENRICH_BATCH_SIZE).all()
-    
-    if not entries:
-        logger.info("No pending entries found.")
-        # Clear progress
-        update_progress(0, 0, "")
-        return
+    with SessionLocal() as db:
+        # Get total pending count for progress tracking
+        from sqlalchemy import or_
+        total_pending = db.query(func.count(Entry.id)).filter(
+            Entry.status == 'pending',
+            or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
+        ).scalar()
+        
+        # Process pending entries that haven't exceeded max retries
+        entries = db.query(Entry).filter(
+            Entry.status == 'pending',
+            or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
+        ).limit(ENRICH_BATCH_SIZE).all()
+        
+        if not entries:
+            logger.info("No pending entries found.")
+            # Clear progress
+            update_progress(0, 0, "")
+            return
 
-    # Get entry IDs for parallel processing
-    entry_ids = [e.id for e in entries]
+        # Get entry IDs for parallel processing
+        entry_ids = [e.id for e in entries]
     
-    # Use ThreadPoolExecutor for parallel enrichment
+    # Use ThreadPoolExecutor for parallel enrichment (outside db session)
     completed = 0
     with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as executor:
         futures = {executor.submit(enrich_entry_worker, eid): eid for eid in entry_ids}
@@ -360,6 +359,7 @@ def main():
                 logger.error(f"Future error for entry {entry_id}: {e}")
     
     logger.info(f"Batch complete: processed {completed}/{len(entry_ids)} entries")
+
 
 if __name__ == "__main__":
     main()
