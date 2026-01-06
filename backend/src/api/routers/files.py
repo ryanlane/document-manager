@@ -165,6 +165,15 @@ async def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
     else:
         size_formatted = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
     
+    # Get series info if available
+    series_info = None
+    if file.meta_json and file.meta_json.get("series_name"):
+        series_info = {
+            "name": file.meta_json.get("series_name"),
+            "number": file.meta_json.get("series_number"),
+            "total": file.meta_json.get("series_total")
+        }
+
     return {
         "paths": {
             "container": file.path,
@@ -178,6 +187,19 @@ async def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
             "modified": file.mtime.isoformat() if file.mtime else None,
             "sha256": file.sha256
         },
+        "processing": {
+            "entry_count": len(entries),
+            "status": file.status or "ok",
+            "doc_status": file.doc_status or "pending"
+        },
+        "enrichment": {
+            "title": file.meta_json.get("doc_title") if file.meta_json else None,
+            "summary": file.doc_summary,
+            "category": file.meta_json.get("doc_category") if file.meta_json else None,
+            "author": file.meta_json.get("doc_author") if file.meta_json else None,
+            "tags": file.meta_json.get("doc_tags") if file.meta_json else None,
+        },
+        "series": series_info,
         "entries_info": {
             "count": len(entries),
             "entries": [
@@ -192,12 +214,6 @@ async def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
                 }
                 for e in entries
             ]
-        },
-        "doc_metadata": {
-            "summary": file.doc_summary,
-            "category": file.meta_json.get("doc_category") if file.meta_json else None,
-            "author": file.meta_json.get("doc_author") if file.meta_json else None,
-            "tags": file.meta_json.get("doc_tags") if file.meta_json else None,
         }
     }
 
