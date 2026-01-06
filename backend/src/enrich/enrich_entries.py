@@ -13,6 +13,7 @@ from sqlalchemy import text, func
 from src.db.session import get_db, SessionLocal
 from src.db.models import Entry
 from src.llm_client import generate_json
+from src.constants import ENRICH_BATCH_SIZE, MAX_TEXT_LENGTH
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ def load_enrichment_config():
     """Load enrichment configuration from config.yaml."""
     config = {
         'prompt_template': DEFAULT_PROMPT_TEMPLATE,
-        'max_text_length': 4000,
+        'max_text_length': MAX_TEXT_LENGTH,
         'custom_fields': []
     }
     
@@ -93,7 +94,6 @@ MAX_RETRIES = 3
 # Note: With GPU, Ollama processes one request at a time, so parallelism
 # doesn't help. Use 1 worker with larger batches to reduce overhead.
 ENRICH_WORKERS = 1  # Single worker (GPU serializes LLM calls anyway)
-ENRICH_BATCH_SIZE = 100  # Larger batches to reduce DB/network overhead (qwen2:1.5b is fast)
 
 # Known category folders to detect
 CATEGORY_FOLDERS = ['scifi', 'sci-fi', 'fantasy', 'romance', 'horror', 'mystery', 

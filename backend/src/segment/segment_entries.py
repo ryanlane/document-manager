@@ -10,13 +10,13 @@ from sqlalchemy import func
 
 from src.db.session import get_db
 from src.db.models import RawFile, Entry, DocumentLink
+from src.constants import MAX_ENTRY_LENGTH
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Segmentation configuration
 MIN_ENTRY_LENGTH = 50      # Filter out very short segments
-MAX_ENTRY_LENGTH = 4000    # Target max chars per segment (~1000 tokens)
 OVERLAP_LENGTH = 200       # Overlap between segments for context continuity
 
 

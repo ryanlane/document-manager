@@ -22,12 +22,10 @@ from src.db.session import SessionLocal
 from src.db.models import RawFile
 from src.db.settings import get_llm_config
 from src.llm_client import LLMClient
+from src.constants import DOC_ENRICH_BATCH_SIZE
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Batch size for doc enrichment
-DOC_ENRICH_BATCH_SIZE = 20
 
 # Max chars to sample from document for summary
 MAX_SAMPLE_CHARS = 8000  # ~2000 tokens

@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
+from src.constants import EMBEDDING_DIMENSIONS
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -408,209 +410,6 @@ class LLMClient:
             return None
 
 
-
-    # ==================== Utility Methods ====================
-
-    def list_models(self) -> List[str]:
-        """List available models from the configured provider."""
-        if MOCK_MODE:
-            return ["mock-model-1", "mock-model-2"]
-
-        if self.provider == "openai":
-            if self.openai_api_key:
-                return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]
-            return []
-        elif self.provider == "anthropic":
-            if self.anthropic_api_key:
-                return ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
-            return []
-        else:
-            # Ollama
-            api_url = f"{self.ollama_url}/api/tags"
-            try:
-                response = requests.get(api_url, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-                return [model['name'] for model in data.get('models', [])]
-            except requests.RequestException as e:
-                logger.error(f"Failed to list Ollama models: {e}")
-                return []
-
-    def model_exists(self, model_name: str) -> bool:
-        """Check if a model is available."""
-        if MOCK_MODE:
-            return True
-
-        if self.provider in ("openai", "anthropic"):
-            return model_name in self.list_models()
-        else:
-            # Ollama
-            available_models = self.list_models()
-            model_base = model_name.split(':')[0]
-            for m in available_models:
-                if m == model_name or m.split(':')[0] == model_base:
-                    return True
-            return False
-
-    def pull_model(self, model_name: str) -> bool:
-        """Pull/download a model. Only applicable for Ollama."""
-        if MOCK_MODE:
-            return True
-
-        if self.provider in ("openai", "anthropic"):
-            logger.info(f"Model pulling not applicable for {self.provider}")
-            return True
-
-        # Ollama model pull
-        api_url = f"{self.ollama_url}/api/pull"
-        logger.info(f"Pulling model '{model_name}' from Ollama...")
-
-        try:
-            resp = requests.post(
-                api_url,
-                json={"name": model_name, "stream": True},
-                stream=True,
-                timeout=7200
-            )
-            resp.raise_for_status()
-
-            last_progress = -1
-            for line in resp.iter_lines():
-                if line:
-                    try:
-                        data = json.loads(line)
-                        status = data.get("status", "")
-
-                        if "completed" in data and "total" in data and data["total"] > 0:
-                            progress = int(data["completed"] / data["total"] * 100)
-                            if progress >= last_progress + 10:
-                                logger.info(f"Pulling {model_name}: {progress}% - {status}")
-                                last_progress = progress
-                        elif status == "success":
-                            logger.info(f"Successfully pulled model '{model_name}'")
-                            return True
-                        elif "error" in data:
-                            logger.error(f"Error pulling model: {data.get('error')}")
-                            return False
-                    except json.JSONDecodeError:
-                        pass
-
-            logger.info(f"Successfully pulled model '{model_name}'")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"Failed to pull model '{model_name}': {e}")
-            return False
-
-    def ensure_models_available(self, models_config: Dict[str, str]) -> bool:
-        """Ensure all required models are available."""
-        if self.provider in ("openai", "anthropic"):
-            return True
-
-        # Ollama - check and pull if needed
-        models_to_check = []
-        if models_config.get("model"):
-            models_to_check.append(("chat", models_config["model"]))
-        if models_config.get("embedding_model"):
-            models_to_check.append(("embedding", models_config["embedding_model"]))
-        if models_config.get("vision_model"):
-            models_to_check.append(("vision", models_config["vision_model"]))
-
-        all_available = True
-        for model_type, model_name in models_to_check:
-            if not self.model_exists(model_name):
-                logger.warning(f"{model_type.capitalize()} model '{model_name}' not found. Attempting to pull...")
-                if self.pull_model(model_name):
-                    logger.info(f"{model_type.capitalize()} model '{model_name}' is now available")
-                else:
-                    logger.error(f"Failed to pull {model_type} model '{model_name}'")
-                    all_available = False
-            else:
-                logger.debug(f"{model_type.capitalize()} model '{model_name}' is available")
-
-        return all_available
-
-    def list_vision_models(self) -> List[str]:
-        """List vision-capable models."""
-        if self.provider == "openai":
-            return ["gpt-4o", "gpt-4o-mini", "gpt-4-vision-preview"]
-        elif self.provider == "anthropic":
-            return []
-        else:
-            # Ollama
-            all_models = self.list_models()
-            vision_available = []
-
-            for model in all_models:
-                model_base = model.split(':')[0].lower()
-                if model_base in VISION_MODELS or any(vm in model.lower() for vm in VISION_MODELS):
-                    vision_available.append(model)
-
-            return vision_available
-
-    def describe_image_base64(self, image_base64: str, model: Optional[str] = None, prompt: Optional[str] = None) -> Optional[str]:
-        """Describe an image from base64 data."""
-        if MOCK_MODE:
-            return "This is a mock image description from base64 data."
-
-        default_prompt = "Describe this image in detail. Include any visible text, objects, people, settings, colors, and notable features."
-        prompt = prompt or default_prompt
-
-        if self.provider == "openai":
-            if not self.openai_api_key:
-                logger.error("OpenAI API key not configured")
-                return None
-
-            model = model or "gpt-4o"
-
-            try:
-                response = requests.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.openai_api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "messages": [{
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                            ]
-                        }],
-                        "max_tokens": 1000
-                    },
-                    timeout=180
-                )
-                response.raise_for_status()
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            except Exception as e:
-                logger.error(f"OpenAI vision from base64 failed: {e}")
-                return None
-        else:
-            # Ollama
-            model = model or self.ollama_vision_model
-
-            try:
-                url = f"{self.ollama_url}/api/generate"
-                payload = {
-                    "model": model,
-                    "prompt": prompt,
-                    "images": [image_base64],
-                    "stream": False
-                }
-
-                response = requests.post(url, json=payload, timeout=180)
-                response.raise_for_status()
-                result = response.json()
-                return result.get("response", "")
-
-            except requests.RequestException as e:
-                logger.error(f"Ollama vision from base64 failed: {e}")
-                return None
-
 # ==================== Legacy Functions (for backward compatibility) ====================
 
 # Default client instance
@@ -630,14 +429,7 @@ def set_default_client(config: Dict[str, Any]):
     global _default_client
     _default_client = LLMClient(config)
 
-
 def generate_json(prompt: str, model: str = None) -> Optional[Dict[str, Any]]:
-    """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().generate_json()`` instead.
-    """
     if MOCK_MODE:
         logger.info("Returning MOCK LLM response")
         return {
@@ -647,121 +439,289 @@ def generate_json(prompt: str, model: str = None) -> Optional[Dict[str, Any]]:
             "tags": ["mock", "test"],
             "summary": "This is a mock summary."
         }
+    
+    # Use the default client if available (which may have db config)
+    client = get_client()
+    if model is None:
+        model = client.ollama_model
+    url = client.ollama_url
 
-    return get_client().generate_json(prompt, model)
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "format": "json",
+        "stream": False
+    }
+    
+    try:
+        response = requests.post(f"{url}/api/generate", json=payload, timeout=120)
+        response.raise_for_status()
+        result = response.json()
+        response_text = result.get("response", "")
+        
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse JSON from LLM response: {response_text}")
+            return None
+            
+    except requests.RequestException as e:
+        logger.error(f"Ollama request failed: {e}")
+        return None
 
 def embed_text(text: str, model: str = EMBEDDING_MODEL) -> Optional[List[float]]:
-    """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().embed_text()`` instead.
-    """
     if MOCK_MODE:
+        # Return random vector using EMBEDDING_DIMENSIONS from constants
         import random
-        return [random.random() for _ in range(768)]
+        return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
 
-    return get_client().embed_text(text, model)
+    url = f"{OLLAMA_URL}/api/embeddings"
+
+    prompt = _sanitize_embedding_prompt(text, EMBEDDING_MAX_CHARS)
+    for attempt in range(1, max(1, EMBEDDING_RETRY_ATTEMPTS) + 1):
+        payload = {"model": model, "prompt": prompt}
+        try:
+            response = requests.post(url, json=payload, timeout=60)
+            response.raise_for_status()
+            result = response.json()
+            return result.get("embedding")
+        except requests.HTTPError as e:
+            resp = getattr(e, "response", None)
+            status = getattr(resp, "status_code", None)
+            logger.error(
+                f"Ollama embedding request failed (status={status}, model={model}, chars={len(prompt)}): {e}"
+            )
+
+            if status in (500, 400, 413) and _looks_like_context_length_error(resp) and attempt < EMBEDDING_RETRY_ATTEMPTS:
+                prompt = _sanitize_embedding_prompt(prompt, max(1, int(len(prompt) * 0.5)))
+                time.sleep(EMBEDDING_RETRY_BASE_DELAY_S * attempt)
+                continue
+            return None
+        except requests.RequestException as e:
+            logger.error(f"Ollama embedding request error (model={model}, chars={len(prompt)}): {e}")
+            if attempt < EMBEDDING_RETRY_ATTEMPTS:
+                time.sleep(EMBEDDING_RETRY_BASE_DELAY_S * attempt)
+                continue
+            return None
 
 def generate_text(prompt: str, model: str = MODEL) -> Optional[str]:
-    """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().generate_text()`` instead.
-    """
     if MOCK_MODE:
         return "This is a mock answer based on the retrieved documents."
 
-    return get_client().generate_text(prompt, model)
+    url = f"{OLLAMA_URL}/api/generate"
+    
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
+    
+    try:
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+        result = response.json()
+        return result.get("response", "")
+    except requests.RequestException as e:
+        logger.error(f"Ollama text generation failed: {e}")
+        return None
 
 def list_models(url: str = None) -> List[str]:
-    """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().list_models()`` instead.
-    """
     if MOCK_MODE:
         return ["mock-model-1", "mock-model-2"]
+    
+    ollama_url = url or OLLAMA_URL
+    api_url = f"{ollama_url}/api/tags"
+    try:
+        response = requests.get(api_url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        # Extract model names
+        return [model['name'] for model in data.get('models', [])]
+    except requests.RequestException as e:
+        logger.error(f"Failed to list Ollama models: {e}")
+        return []
 
-    if url and url != OLLAMA_URL:
-        # Create temporary client with custom URL
-        client = LLMClient({"provider": "ollama", "url": url})
-        return client.list_models()
-
-    return get_client().list_models()
 
 def model_exists(model_name: str, url: str = None) -> bool:
-    """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().model_exists()`` instead.
-    """
+    """Check if a model is available in Ollama."""
     if MOCK_MODE:
         return True
+    
+    available_models = list_models(url)
+    # Check exact match or base name match (e.g., "phi4-mini:latest" matches "phi4-mini")
+    model_base = model_name.split(':')[0]
+    for m in available_models:
+        if m == model_name or m.split(':')[0] == model_base:
+            return True
+    return False
 
-    if url and url != OLLAMA_URL:
-        client = LLMClient({"provider": "ollama", "url": url})
-        return client.model_exists(model_name)
-
-    return get_client().model_exists(model_name)
 
 def pull_model(model_name: str, url: str = None) -> bool:
     """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().pull_model()`` instead.
+    Pull/download a model from Ollama. Blocks until complete.
+    
+    Args:
+        model_name: Name of the model to pull (e.g., "phi4-mini:latest")
+        url: Ollama URL (defaults to OLLAMA_URL)
+    
+    Returns:
+        True if pull succeeded, False otherwise
     """
     if MOCK_MODE:
         return True
+    
+    ollama_url = url or OLLAMA_URL
+    api_url = f"{ollama_url}/api/pull"
+    
+    logger.info(f"Pulling model '{model_name}' from Ollama...")
+    
+    try:
+        # Use streaming to track progress
+        resp = requests.post(
+            api_url,
+            json={"name": model_name, "stream": True},
+            stream=True,
+            timeout=7200  # 2 hour timeout for large models
+        )
+        resp.raise_for_status()
+        
+        last_progress = -1
+        for line in resp.iter_lines():
+            if line:
+                try:
+                    data = json.loads(line)
+                    status = data.get("status", "")
+                    
+                    if "completed" in data and "total" in data and data["total"] > 0:
+                        progress = int(data["completed"] / data["total"] * 100)
+                        # Log progress at 10% intervals
+                        if progress >= last_progress + 10:
+                            logger.info(f"Pulling {model_name}: {progress}% - {status}")
+                            last_progress = progress
+                    elif status == "success":
+                        logger.info(f"Successfully pulled model '{model_name}'")
+                        return True
+                    elif "error" in data:
+                        logger.error(f"Error pulling model: {data.get('error')}")
+                        return False
+                except json.JSONDecodeError:
+                    pass
+        
+        logger.info(f"Successfully pulled model '{model_name}'")
+        return True
+        
+    except requests.RequestException as e:
+        logger.error(f"Failed to pull model '{model_name}': {e}")
+        return False
 
-    if url and url != OLLAMA_URL:
-        client = LLMClient({"provider": "ollama", "url": url})
-        return client.pull_model(model_name)
-
-    return get_client().pull_model(model_name)
 
 def ensure_models_available(config: Dict[str, Any]) -> bool:
     """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().ensure_models_available()`` instead.
+    Ensure all configured models are available in Ollama.
+    Pulls missing models automatically.
+    
+    Args:
+        config: LLM config dict with model, embedding_model, etc.
+    
+    Returns:
+        True if all models are available, False if any pull failed
     """
     if config.get("provider") != "ollama":
-        return True
+        return True  # Only applies to Ollama
+    
+    url = config.get("url") or OLLAMA_URL
+    models_to_check = []
+    
+    # Collect models to check
+    if config.get("model"):
+        models_to_check.append(("chat", config["model"]))
+    if config.get("embedding_model"):
+        models_to_check.append(("embedding", config["embedding_model"]))
+    if config.get("vision_model"):
+        models_to_check.append(("vision", config["vision_model"]))
+    
+    all_available = True
+    for model_type, model_name in models_to_check:
+        if not model_exists(model_name, url):
+            logger.warning(f"{model_type.capitalize()} model '{model_name}' not found. Attempting to pull...")
+            if pull_model(model_name, url):
+                logger.info(f"{model_type.capitalize()} model '{model_name}' is now available")
+            else:
+                logger.error(f"Failed to pull {model_type} model '{model_name}'")
+                all_available = False
+        else:
+            logger.debug(f"{model_type.capitalize()} model '{model_name}' is available")
+    
+    return all_available
 
-    # Create client with this specific config
-    client = LLMClient(config)
-    return client.ensure_models_available(config)
 
 def list_vision_models() -> List[str]:
-    """
-    Legacy wrapper - delegates to LLMClient.
+    """Return a list of available vision-capable models."""
+    all_models = list_models()
+    vision_available = []
+    
+    for model in all_models:
+        # Check if model name matches known vision models
+        model_base = model.split(':')[0].lower()
+        if model_base in VISION_MODELS or any(vm in model.lower() for vm in VISION_MODELS):
+            vision_available.append(model)
+    
+    return vision_available
 
-    .. deprecated::
-        Use ``LLMClient().list_vision_models()`` instead.
-    """
-    return get_client().list_vision_models()
 
 def describe_image(
-    image_path: str,
+    image_path: str, 
     model: str = VISION_MODEL,
     prompt: str = "Describe this image in detail. Include any visible text, objects, people, settings, colors, and notable features."
 ) -> Optional[str]:
     """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().describe_image()`` instead.
+    Use a vision model to describe an image.
+    
+    Args:
+        image_path: Path to the image file
+        model: Vision model to use (e.g., 'llava', 'llama3.2-vision')
+        prompt: The prompt to send with the image
+        
+    Returns:
+        Description string or None if failed
     """
     if MOCK_MODE:
         return "This is a mock image description. The image shows a scene with various elements."
+    
+    try:
+        # Read and encode image as base64
+        image_path = Path(image_path)
+        if not image_path.exists():
+            logger.error(f"Image file not found: {image_path}")
+            return None
+        
+        with open(image_path, 'rb') as f:
+            image_data = base64.b64encode(f.read()).decode('utf-8')
+        
+        url = f"{OLLAMA_URL}/api/generate"
+        
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "images": [image_data],
+            "stream": False
+        }
+        
+        response = requests.post(url, json=payload, timeout=180)  # Longer timeout for vision
+        response.raise_for_status()
+        result = response.json()
+        
+        description = result.get("response", "")
+        logger.info(f"Generated description ({len(description)} chars) for {image_path.name}")
+        return description
+        
+    except requests.RequestException as e:
+        logger.error(f"Vision model request failed: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error processing image {image_path}: {e}")
+        return None
 
-    return get_client().describe_image(image_path, model, prompt)
 
 def describe_image_base64(
     image_base64: str,
@@ -769,12 +729,35 @@ def describe_image_base64(
     prompt: str = "Describe this image in detail. Include any visible text, objects, people, settings, colors, and notable features."
 ) -> Optional[str]:
     """
-    Legacy wrapper - delegates to LLMClient.
-
-    .. deprecated::
-        Use ``LLMClient().describe_image_base64()`` instead.
+    Use a vision model to describe an image from base64 data.
+    
+    Args:
+        image_base64: Base64-encoded image data
+        model: Vision model to use
+        prompt: The prompt to send with the image
+        
+    Returns:
+        Description string or None if failed
     """
     if MOCK_MODE:
         return "This is a mock image description from base64 data."
-
-    return get_client().describe_image_base64(image_base64, model, prompt)
+    
+    try:
+        url = f"{OLLAMA_URL}/api/generate"
+        
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "images": [image_base64],
+            "stream": False
+        }
+        
+        response = requests.post(url, json=payload, timeout=180)
+        response.raise_for_status()
+        result = response.json()
+        
+        return result.get("response", "")
+        
+    except requests.RequestException as e:
+        logger.error(f"Vision model request failed: {e}")
+        return None

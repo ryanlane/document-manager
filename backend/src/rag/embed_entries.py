@@ -9,6 +9,7 @@ from sqlalchemy import func
 from src.db.session import get_db
 from src.db.models import Entry
 from src.llm_client import embed_text
+from src.constants import EMBED_BATCH_SIZE
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -22,7 +23,6 @@ else:
 EMBED_PROGRESS_FILE = os.path.join(SHARED_DIR, "embed_progress.json")
 
 # Batch processing config
-BATCH_SIZE = 10  # Number of entries to embed in parallel
 MAX_WORKERS = 4  # Number of concurrent threads
 
 def update_progress(current: int, total: int, entry_title: str = ""):

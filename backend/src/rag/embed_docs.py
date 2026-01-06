@@ -16,12 +16,10 @@ from sqlalchemy import text
 from src.db.session import SessionLocal
 from src.db.models import RawFile
 from src.llm_client import embed_text
+from src.constants import DOC_EMBED_BATCH_SIZE
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Batch size for doc embedding
-DOC_EMBED_BATCH_SIZE = 50
 
 # Parallel workers for embedding (embedding is fast, can parallelize)
 DOC_EMBED_WORKERS = 4

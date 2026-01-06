@@ -8,6 +8,7 @@ from sqlalchemy import text, func, literal
 from src.db.session import get_db
 from src.db.models import Entry, RawFile
 from src.llm_client import embed_text
+from src.constants import RRF_K, DEFAULT_SEARCH_RESULTS
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def search_docs_stage1(
     Uses doc_embedding (vector) and doc_search_vector (FTS) for hybrid ranking.
     
     Uses Reciprocal Rank Fusion (RRF) to combine vector and keyword rankings.
-    RRF formula: score = sum(1 / (k + rank_i)) where k=60 is standard.
+    RRF formula: score = sum(1 / (k + rank_i)) where k=RRF_K is standard.
     This is more robust than raw score combination since it normalizes 
     across different score distributions.
     
@@ -46,7 +47,8 @@ def search_docs_stage1(
     params = {
         "embedding": str(query_embedding),
         "query": query,
-        "limit": top_n * 3  # Get more candidates for RRF
+        "limit": top_n * 3,  # Get more candidates for RRF
+        "rrf_k": float(RRF_K)  # RRF constant for ranking fusion
     }
     
     if filters:
@@ -60,7 +62,7 @@ def search_docs_stage1(
             filter_sql += " AND rf.extension = :ext_filter"
             params['ext_filter'] = filters['extension']
     
-    # Use Reciprocal Rank Fusion (RRF) with k=60
+    # Use Reciprocal Rank Fusion (RRF) with k=RRF_K
     # RRF score = 1/(k + vector_rank) + 1/(k + keyword_rank)
     # This normalizes scores across different distributions
     # Limit each source to top 100 candidates for efficiency
@@ -92,9 +94,9 @@ def search_docs_stage1(
                 COALESCE(k.keyword_score, 0) as keyword_score,
                 COALESCE(v.vector_rank, 99999) as vector_rank,
                 COALESCE(k.keyword_rank, 99999) as keyword_rank,
-                -- RRF with k=60, weight vector 0.7, keyword 0.3
-                (0.7 / (60.0 + COALESCE(v.vector_rank, 99999))) + 
-                (0.3 / (60.0 + COALESCE(k.keyword_rank, 99999))) as rrf_score
+                -- RRF with k=RRF_K, weight vector 0.7, keyword 0.3
+                (0.7 / (:rrf_k + COALESCE(v.vector_rank, 99999))) + 
+                (0.3 / (:rrf_k + COALESCE(k.keyword_rank, 99999))) as rrf_score
             FROM doc_vector v
             FULL OUTER JOIN doc_keyword k ON v.id = k.id
         )
@@ -147,9 +149,9 @@ def search_chunks_stage2(
                 COALESCE(v.id, k.id) as id,
                 COALESCE(v.vector_score, 0) as vector_score,
                 COALESCE(k.keyword_score, 0) as keyword_score,
-                -- RRF with k=60, weight vector 0.7, keyword 0.3
-                (0.7 / (60.0 + COALESCE(v.vector_rank, 99999))) + 
-                (0.3 / (60.0 + COALESCE(k.keyword_rank, 99999))) as rrf_score
+                -- RRF with k=RRF_K, weight vector 0.7, keyword 0.3
+                (0.7 / (:rrf_k + COALESCE(v.vector_rank, 99999))) + 
+                (0.3 / (:rrf_k + COALESCE(k.keyword_rank, 99999))) as rrf_score
             FROM vector_ranked v
             FULL OUTER JOIN keyword_ranked k ON v.id = k.id
         )
@@ -163,7 +165,8 @@ def search_chunks_stage2(
         "embedding": str(query_embedding),
         "query": query,
         "doc_ids": doc_ids,
-        "limit": k
+        "limit": k,
+        "rrf_k": float(RRF_K)
     }).fetchall()
     
     # If no embedded chunks, fall back to keyword-only search within docs

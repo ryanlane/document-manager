@@ -6,6 +6,8 @@ from pgvector.sqlalchemy import Vector
 import re
 import uuid
 
+from src.constants import EMBEDDING_DIMENSIONS, AUTHOR_BUCKET_COUNT
+
 Base = declarative_base()
 
 
@@ -93,11 +95,11 @@ class RawFile(Base):
     # Source and author normalization (for partitioning/filtering)
     source = Column(Text)  # e.g., 'story', 'docs' - derived from path
     author_key = Column(Text)  # Normalized author (lowercase, trimmed)
-    author_bucket = Column(Integer)  # hash(author_key) % 128 for partitioning
+    author_bucket = Column(Integer)  # hash(author_key) % AUTHOR_BUCKET_COUNT for partitioning
     
     # Document-level embeddings (for two-stage retrieval)
     doc_summary = Column(Text)  # LLM-generated summary of entire document
-    doc_embedding = Column(Vector(768))  # Document-level embedding
+    doc_embedding = Column(Vector(EMBEDDING_DIMENSIONS))  # Document-level embedding
     doc_search_vector = Column(TSVECTOR)  # Document-level FTS
     doc_status = Column(Text, default='pending')  # 'pending', 'enriched', 'embedded'
     
@@ -159,10 +161,10 @@ class Entry(Base):
     # Source and author normalization (denormalized for fast filtering)
     source = Column(Text)  # e.g., 'story', 'docs' - copied from raw_file
     author_key = Column(Text)  # Normalized author (lowercase, trimmed)
-    author_bucket = Column(Integer)  # hash(author_key) % 128 for partitioning
+    author_bucket = Column(Integer)  # hash(author_key) % AUTHOR_BUCKET_COUNT for partitioning
 
     search_vector = Column(TSVECTOR)
-    embedding = Column(Vector(768)) # Assuming 768 dimensions for standard models (e.g. nomic-embed-text, or llama3 hidden state)
+    embedding = Column(Vector(EMBEDDING_DIMENSIONS))  # Standard dimensions for models (e.g. nomic-embed-text)
     status = Column(Text, default='pending')  # 'pending', 'enriched', 'error'
     retry_count = Column(Integer, default=0)  # Track failed enrichment attempts
 
