@@ -151,34 +151,51 @@ async def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
     
     entries = db.query(Entry).filter(Entry.file_id == file_id).all()
     
+    # Format file size
+    size_bytes = file.size_bytes or 0
+    if size_bytes < 1024:
+        size_formatted = f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        size_formatted = f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        size_formatted = f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        size_formatted = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+    
     return {
-        "file": {
-            "id": file.id,
-            "path": file.path,
-            "filename": file.filename,
-            "extension": file.extension,
-            "size_bytes": file.size_bytes,
-            "created_at": file.created_at.isoformat() if file.created_at else None,
-            "modified_at": file.mtime.isoformat() if file.mtime else None,
-            "doc_summary": file.doc_summary,
-            "doc_category": file.meta_json.get("doc_category") if file.meta_json else None,
-            "doc_author": file.meta_json.get("doc_author") if file.meta_json else None,
-            "doc_tags": file.meta_json.get("doc_tags") if file.meta_json else None,
-            "meta_json": file.meta_json
+        "paths": {
+            "container": file.path,
+            "host": None  # TODO: Add host path mapping from settings
         },
-        "entries": [
-            {
-                "id": e.id,
-                "title": e.title,
-                "summary": e.summary,
-                "category": e.category,
-                "author": e.author,
-                "tags": e.tags,
-                "entry_text": e.entry_text[:500] if e.entry_text else None,
-            }
-            for e in entries
-        ],
-        "entry_count": len(entries)
+        "file_info": {
+            "size_formatted": size_formatted,
+            "size_bytes": size_bytes,
+            "file_type": file.file_type,
+            "extension": file.extension,
+            "modified": file.mtime.isoformat() if file.mtime else None,
+            "sha256": file.sha256
+        },
+        "entries_info": {
+            "count": len(entries),
+            "entries": [
+                {
+                    "id": e.id,
+                    "title": e.title,
+                    "summary": e.summary,
+                    "category": e.category,
+                    "author": e.author,
+                    "tags": e.tags,
+                    "entry_text": e.entry_text[:500] if e.entry_text else None,
+                }
+                for e in entries
+            ]
+        },
+        "doc_metadata": {
+            "summary": file.doc_summary,
+            "category": file.meta_json.get("doc_category") if file.meta_json else None,
+            "author": file.meta_json.get("doc_author") if file.meta_json else None,
+            "tags": file.meta_json.get("doc_tags") if file.meta_json else None,
+        }
     }
 
 

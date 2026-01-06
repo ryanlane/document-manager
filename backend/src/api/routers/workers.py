@@ -23,6 +23,7 @@ from ...db.models import Entry
 from ...db.settings import get_setting
 from ...db.session import get_db
 from ...services import workers as workers_service
+from ...services.worker_state import get_primary_worker_state
 from .shared import (
     WORKER_LOG_FILE,
     WORKER_PROGRESS_FILE,
@@ -70,8 +71,14 @@ class WorkerHeartbeat(BaseModel):
 # ============================================================================
 
 @router.get("/worker/state")
-def get_worker_state_endpoint():
-    """Get current worker process states."""
+def get_worker_state_endpoint(db: Session = Depends(get_db)):
+    """Get current worker process states from database."""
+    # PRIMARY: Read from database
+    state_manager = get_primary_worker_state(db)
+    if state_manager:
+        return state_manager.get_config()
+
+    # FALLBACK: Read from file if no worker in DB yet
     return get_worker_state()
 
 
@@ -189,25 +196,34 @@ def get_worker_schedule_status(db: Session = Depends(get_db)):
 
 
 @router.post("/worker/state")
-def update_worker_state(update: WorkerStateUpdate):
-    """Update worker process states."""
-    current = get_worker_state()
-    
+def update_worker_state(update: WorkerStateUpdate, db: Session = Depends(get_db)):
+    """Update worker process states in database."""
+    # Build updates dict
+    updates = {}
     if update.ingest is not None:
-        current["ingest"] = update.ingest
+        updates["ingest"] = update.ingest
     if update.segment is not None:
-        current["segment"] = update.segment
+        updates["segment"] = update.segment
     if update.enrich is not None:
-        current["enrich"] = update.enrich
+        updates["enrich"] = update.enrich
     if update.enrich_docs is not None:
-        current["enrich_docs"] = update.enrich_docs
+        updates["enrich_docs"] = update.enrich_docs
     if update.embed is not None:
-        current["embed"] = update.embed
+        updates["embed"] = update.embed
     if update.embed_docs is not None:
-        current["embed_docs"] = update.embed_docs
+        updates["embed_docs"] = update.embed_docs
     if update.running is not None:
-        current["running"] = update.running
-    
+        updates["running"] = update.running
+
+    # PRIMARY: Update in database
+    state_manager = get_primary_worker_state(db)
+    if state_manager:
+        state_manager.update_config(updates)
+        return state_manager.get_config()
+
+    # FALLBACK: Update file if no worker in DB yet
+    current = get_worker_state()
+    current.update(updates)
     if save_worker_state(current):
         return current
     else:
@@ -215,41 +231,47 @@ def update_worker_state(update: WorkerStateUpdate):
 
 
 @router.get("/worker/progress")
-def get_worker_progress():
-    """Get current batch progress for all worker phases."""
+def get_worker_progress(db: Session = Depends(get_db)):
+    """Get current batch progress for all worker phases from database."""
     result = {}
-    
-    # Read from the new unified progress file (set by worker_loop.py)
-    try:
-        if os.path.exists(WORKER_PROGRESS_FILE):
-            with open(WORKER_PROGRESS_FILE, 'r') as f:
-                result = json.load(f)
-    except Exception:
-        pass
-    
-    # Also read from legacy progress files if they exist
-    def read_legacy_progress(filepath):
+
+    # PRIMARY: Read from database
+    state_manager = get_primary_worker_state(db)
+    if state_manager:
+        result = state_manager.get_progress() or {}
+
+    # FALLBACK: Read from file if no worker in DB yet
+    if not result:
         try:
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    return json.load(f)
+            if os.path.exists(WORKER_PROGRESS_FILE):
+                with open(WORKER_PROGRESS_FILE, 'r') as f:
+                    result = json.load(f)
         except Exception:
             pass
-        return None
-    
-    # Merge legacy progress files (for backwards compatibility)
-    if 'ingest' not in result:
-        legacy = read_legacy_progress(INGEST_PROGRESS_FILE)
-        if legacy:
-            result['ingest'] = legacy
-    if 'enrich' not in result:
-        legacy = read_legacy_progress(ENRICH_PROGRESS_FILE)
-        if legacy:
-            result['enrich'] = legacy
-    if 'embed' not in result:
-        legacy = read_legacy_progress(EMBED_PROGRESS_FILE)
-        if legacy:
-            result['embed'] = legacy
+
+        # Also read from legacy progress files if they exist
+        def read_legacy_progress(filepath):
+            try:
+                if os.path.exists(filepath):
+                    with open(filepath, 'r') as f:
+                        return json.load(f)
+            except Exception:
+                pass
+            return None
+
+        # Merge legacy progress files (for backwards compatibility)
+        if 'ingest' not in result:
+            legacy = read_legacy_progress(INGEST_PROGRESS_FILE)
+            if legacy:
+                result['ingest'] = legacy
+        if 'enrich' not in result:
+            legacy = read_legacy_progress(ENRICH_PROGRESS_FILE)
+            if legacy:
+                result['enrich'] = legacy
+        if 'embed' not in result:
+            legacy = read_legacy_progress(EMBED_PROGRESS_FILE)
+            if legacy:
+                result['embed'] = legacy
     
     # Compute summary fields for notifications
     phases = {}

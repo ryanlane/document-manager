@@ -26,7 +26,7 @@ class AskRequest(BaseModel):
     query: str
     k: int = 5
     model: Optional[str] = None
-    filters: dict = {}
+    filters: Optional[dict] = None
     search_mode: Optional[str] = 'hybrid'
     vector_weight: Optional[float] = 0.7
 
@@ -60,7 +60,7 @@ class TwoStageSearchRequest(BaseModel):
     query: str
     k: int = 10
     stage1_docs: int = 20
-    filters: dict = {}
+    filters: Optional[dict] = None
 
 
 # ============================================================================
@@ -78,7 +78,7 @@ def ask(request: AskRequest, db: Session = Depends(get_db)):
         db, 
         request.query, 
         k=request.k, 
-        filters=request.filters,
+        filters=request.filters or {},
         mode=search_mode,
         vector_weight=vector_weight
     )
@@ -236,7 +236,7 @@ def search_two_stage_endpoint(
         query=request.query,
         k=request.k,
         stage1_docs=request.stage1_docs,
-        filters=request.filters
+        filters=request.filters or {}
     )
     
     # Serialize entries
