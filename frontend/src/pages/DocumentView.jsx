@@ -61,20 +61,42 @@ function DocumentView() {
         setLoading(false)
 
         const name = (data.filename || '').toLowerCase()
-        const previewable =
+
+        // Text files that can be previewed directly
+        const textPreviewable =
           name.endsWith('.txt') ||
           name.endsWith('.md') ||
           name.endsWith('.markdown') ||
           name.endsWith('.html') ||
           name.endsWith('.htm')
 
-        if (!previewable) return
+        // Document files that need text extraction
+        const extractablePreviewable =
+          name.endsWith('.pdf') ||
+          name.endsWith('.docx') ||
+          name.endsWith('.doc') ||
+          name.endsWith('.rtf') ||
+          name.endsWith('.epub')
+
+        if (!textPreviewable && !extractablePreviewable) return
 
         setContentLoading(true)
         try {
-          const contentRes = await fetch(`/api/files/${id}/content`)
-          if (!contentRes.ok) throw new Error('Failed to load file content')
-          const text = await contentRes.text()
+          let text = ''
+
+          if (textPreviewable) {
+            // Fetch raw content for text files
+            const contentRes = await fetch(`/api/files/${id}/content`)
+            if (!contentRes.ok) throw new Error('Failed to load file content')
+            text = await contentRes.text()
+          } else if (extractablePreviewable) {
+            // Use text extraction endpoint for documents
+            const textRes = await fetch(`/api/files/${id}/text`)
+            if (!textRes.ok) throw new Error('Failed to extract text from document')
+            const data = await textRes.json()
+            text = data.text
+          }
+
           if (cancelled) return
           setContent(text)
         } catch (err) {

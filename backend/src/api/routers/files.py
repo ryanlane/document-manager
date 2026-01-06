@@ -145,6 +145,133 @@ async def serve_file_content(file_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/files/{file_id}/text")
+async def get_file_text_preview(file_id: int, db: Session = Depends(get_db)):
+    """Extract plain text from document for preview (supports PDF, DOCX, RTF, ePub)."""
+    file = db.query(RawFile).filter(RawFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = Path(file.path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    text_content = ""
+    extension = file.extension.lower()
+
+    try:
+        # Extract text based on file type
+        if extension == '.pdf':
+            # Use PyMuPDF (fitz)
+            import fitz
+            doc = fitz.open(str(file_path))
+            text_parts = []
+            for page in doc:
+                text_parts.append(page.get_text())
+            text_content = "\n\n".join(text_parts)
+            doc.close()
+
+        elif extension in ['.docx', '.doc']:
+            # Try python-docx first (works for .docx and misnamed .docx files)
+            try:
+                from docx import Document
+                doc = Document(str(file_path))
+                text_parts = []
+                for para in doc.paragraphs:
+                    if para.text.strip():
+                        text_parts.append(para.text)
+                text_content = "\n\n".join(text_parts)
+            except Exception as docx_error:
+                # Fall back to Tika for old .doc format or other issues
+                try:
+                    import requests
+                    tika_url = os.getenv('TIKA_URL', 'http://tika:9998')
+                    with open(str(file_path), 'rb') as f:
+                        response = requests.put(
+                            f"{tika_url}/tika",
+                            data=f,
+                            headers={'Accept': 'text/plain'},
+                            timeout=30
+                        )
+                    if response.status_code == 200:
+                        # Tika returns UTF-8 but sometimes response.text decodes incorrectly
+                        # Use response.content and decode as UTF-8 explicitly
+                        text_content = response.content.decode('utf-8', errors='replace')
+                    else:
+                        raise Exception(f"Tika extraction failed: {response.status_code}")
+                except Exception as tika_error:
+                    # Last resort: try reading as plain text with common encodings
+                    try:
+                        # Try common encodings for Windows documents
+                        for encoding in ['utf-8', 'windows-1252', 'latin-1', 'cp1252']:
+                            try:
+                                with open(str(file_path), 'r', encoding=encoding) as f:
+                                    text_content = f.read()
+                                break  # Success, stop trying
+                            except (UnicodeDecodeError, LookupError):
+                                continue
+                        else:
+                            # If all encodings fail, use utf-8 with replace
+                            with open(str(file_path), 'r', encoding='utf-8', errors='replace') as f:
+                                text_content = f.read()
+                    except:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Could not extract text from .doc file (tried python-docx, Tika, and plain text): {str(docx_error)}"
+                        )
+
+        elif extension == '.rtf':
+            # Use striprtf
+            from striprtf.striprtf import rtf_to_text
+            with open(str(file_path), 'r', encoding='utf-8', errors='ignore') as f:
+                rtf_content = f.read()
+                text_content = rtf_to_text(rtf_content)
+
+        elif extension == '.epub':
+            # Use ebooklib
+            from ebooklib import epub
+            from bs4 import BeautifulSoup
+            book = epub.read_epub(str(file_path))
+            text_parts = []
+            for item in book.get_items():
+                if item.get_type() == 9:  # ITEM_DOCUMENT
+                    soup = BeautifulSoup(item.get_content(), 'html.parser')
+                    # Extract text and preserve paragraph breaks
+                    for p in soup.find_all(['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                        text = p.get_text().strip()
+                        if text:
+                            text_parts.append(text)
+            text_content = "\n\n".join(text_parts)
+
+        elif extension in ['.txt', '.md', '.markdown']:
+            # Plain text files
+            with open(str(file_path), 'r', encoding='utf-8', errors='ignore') as f:
+                text_content = f.read()
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Text extraction not supported for {extension} files"
+            )
+
+        # Clean up text: remove excessive whitespace
+        text_content = "\n\n".join(
+            line.strip() for line in text_content.split("\n") if line.strip()
+        )
+
+        return {
+            "text": text_content,
+            "length": len(text_content),
+            "extension": extension
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to extract text: {str(e)}"
+        )
+
+
 @router.get("/files/{file_id}/metadata")
 async def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
     """Get full file metadata including entries."""

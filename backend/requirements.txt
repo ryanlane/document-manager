@@ -15,6 +15,11 @@ Pillow
 pytesseract
 PyMuPDF
 pdf2image
+# Document text extraction
+python-docx
+striprtf
+ebooklib
+beautifulsoup4
 # Dimensionality reduction for embedding visualization
 scikit-learn
 umap-learn
