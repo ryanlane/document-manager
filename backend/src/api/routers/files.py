@@ -69,8 +69,11 @@ async def list_files(
         order_col = RawFile.size_bytes
     elif sort_by == 'created_at':
         order_col = RawFile.created_at
-    else:
+    elif sort_by == 'modified_at':
         # RawFile uses `mtime` (filesystem modified time)
+        order_col = RawFile.mtime
+    else:
+        # Default to mtime
         order_col = RawFile.mtime
     
     if sort_dir == 'asc':

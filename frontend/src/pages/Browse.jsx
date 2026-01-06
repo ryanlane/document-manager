@@ -23,6 +23,7 @@ function Browse() {
   
   const [activeTab, setActiveTab] = useState(initialTab)
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
+  const [sortBy, setSortBy] = useState('created_at-desc') // Sort option
   
   // Files state
   const [files, setFiles] = useState([])
@@ -73,7 +74,8 @@ function Browse() {
     setFilesLoading(true)
     try {
       const skip = (filesPage - 1) * filesLimit
-      const res = await fetch(`/api/files?skip=${skip}&limit=${filesLimit}`)
+      const [sortField, sortDir] = sortBy.split('-')
+      const res = await fetch(`/api/files?skip=${skip}&limit=${filesLimit}&sort_by=${sortField}&sort_dir=${sortDir}`)
       const data = await res.json()
       setFiles(data.files || [])
       setFilesTotal(data.total || 0)
@@ -82,7 +84,7 @@ function Browse() {
     } finally {
       setFilesLoading(false)
     }
-  }, [filesPage])
+  }, [filesPage, sortBy])
 
   // Images fetching
   const fetchImages = useCallback(async () => {
@@ -244,28 +246,50 @@ function Browse() {
               </select>
             </>
           )}
-          <div className={styles.viewToggle}>
-            <button 
-              className={viewMode === 'list' ? styles.active : ''} 
-              onClick={() => setViewMode('list')}
-              title="List view"
-            >
-              <List size={16} />
-            </button>
-            <button 
-              className={viewMode === 'grid' ? styles.active : ''} 
-              onClick={() => setViewMode('grid')}
-              title="Grid view"
-            >
-              <Grid size={16} />
-            </button>
-          </div>
+
         </div>
       </div>
 
       {/* Files Tab Content */}
       {activeTab === TABS.FILES && (
         <div className={styles.content}>
+          {/* Controls Bar */}
+          <div className={styles.controls}>
+            <div className={styles.controlsLeft}>
+              <Filter size={16} />
+              <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value)}
+                className={styles.sortSelect}
+              >
+                <option value="created_at-desc">Newest First (Added to DB)</option>
+                <option value="created_at-asc">Oldest First (Added to DB)</option>
+                <option value="modified_at-desc">Recently Modified</option>
+                <option value="modified_at-asc">Least Recently Modified</option>
+                <option value="filename-asc">Filename (A-Z)</option>
+                <option value="filename-desc">Filename (Z-A)</option>
+                <option value="size-desc">Largest First</option>
+                <option value="size-asc">Smallest First</option>
+              </select>
+            </div>
+            <div className={styles.controlsRight}>
+              <button 
+                onClick={() => setViewMode('list')}
+                className={viewMode === 'list' ? styles.active : ''}
+                title="List view"
+              >
+                <List size={18} />
+              </button>
+              <button 
+                onClick={() => setViewMode('grid')}
+                className={viewMode === 'grid' ? styles.active : ''}
+                title="Grid view"
+              >
+                <Grid size={18} />
+              </button>
+            </div>
+          </div>
+
           {filesLoading ? (
             <div className={styles.loadingList}>
               {[...Array(10)].map((_, i) => (
