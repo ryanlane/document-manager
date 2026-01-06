@@ -65,6 +65,8 @@ def embed_single(entry_id: int, text: str) -> tuple:
     This function is thread-safe and doesn't access the database.
     """
     embedding = embed_text(text)
+    if embedding is None:
+        logger.error(f"Failed to embed entry {entry_id} (chars={len(text) if text else 0})")
     return (entry_id, embedding)
 
 def embed_entry(db: Session, entry: Entry):
