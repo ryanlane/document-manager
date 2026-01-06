@@ -23,3 +23,8 @@ beautifulsoup4
 # Dimensionality reduction for embedding visualization
 scikit-learn
 umap-learn
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+httpx  # For async TestClient support
