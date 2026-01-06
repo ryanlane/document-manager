@@ -5,12 +5,58 @@ Stores user-configurable settings in the database.
 import json
 import logging
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TypedDict, Union, Literal, overload
 from sqlalchemy.orm import Session
 from sqlalchemy import Column, String, Text, DateTime, func
 from src.db.models import Base
 
 logger = logging.getLogger(__name__)
+
+
+# Type definitions for settings
+class OllamaConfig(TypedDict):
+    """Ollama LLM provider configuration."""
+    url: str
+    model: str
+    embedding_model: str
+    vision_model: str
+
+
+class OpenAIConfig(TypedDict):
+    """OpenAI provider configuration."""
+    api_key: str
+    model: str
+    embedding_model: str
+    vision_model: str
+
+
+class AnthropicConfig(TypedDict):
+    """Anthropic provider configuration."""
+    api_key: str
+    model: str
+
+
+class LLMSettings(TypedDict):
+    """LLM provider settings."""
+    provider: str  # "ollama", "openai", or "anthropic"
+    ollama: OllamaConfig
+    openai: OpenAIConfig
+    anthropic: AnthropicConfig
+
+
+class SourcesConfig(TypedDict):
+    """Source folders configuration."""
+    include: List[str]
+    exclude: List[str]
+
+
+class HostPathMappings(TypedDict, total=False):
+    """Container path to host path mappings."""
+    # Dynamic keys: container paths map to host paths
+
+
+# Union type for all possible setting values
+SettingValue = Union[bool, str, int, float, None, LLMSettings, SourcesConfig, List[str], Dict[str, str]]
 
 
 class Setting(Base):
@@ -75,8 +121,47 @@ DEFAULT_SETTINGS = {
 }
 
 
-def get_setting(db: Session, key: str) -> Optional[Any]:
-    """Get a setting value by key."""
+@overload
+def get_setting(db: Session, key: Literal["setup_complete"]) -> Optional[bool]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["indexing_mode"]) -> Optional[str]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["gpu_vram_gb"]) -> Optional[int]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["llm"]) -> Optional[LLMSettings]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["sources"]) -> Optional[SourcesConfig]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["extensions"]) -> Optional[List[str]]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["host_path_mappings"]) -> Optional[Dict[str, str]]: ...
+
+@overload
+def get_setting(db: Session, key: str) -> Optional[SettingValue]: ...
+
+
+def get_setting(db: Session, key: str) -> Optional[SettingValue]:
+    """
+    Get a setting value by key.
+
+    Returns the setting value with proper typing based on the key.
+    Returns None if the key doesn't exist in defaults or database.
+
+    Type hints are provided via overloads for known setting keys:
+    - "setup_complete": bool
+    - "indexing_mode": str
+    - "gpu_vram_gb": int
+    - "llm": LLMSettings
+    - "sources": SourcesConfig
+    - "extensions": List[str]
+    - "host_path_mappings": Dict[str, str]
+    """
     setting = db.query(Setting).filter(Setting.key == key).first()
     if setting:
         try:
@@ -87,7 +172,7 @@ def get_setting(db: Session, key: str) -> Optional[Any]:
     return DEFAULT_SETTINGS.get(key)
 
 
-def set_setting(db: Session, key: str, value: Any) -> bool:
+def set_setting(db: Session, key: str, value: SettingValue) -> bool:
     """Set a setting value."""
     try:
         json_value = json.dumps(value) if not isinstance(value, str) else value
@@ -105,21 +190,26 @@ def set_setting(db: Session, key: str, value: Any) -> bool:
         return False
 
 
-def get_all_settings(db: Session) -> Dict[str, Any]:
-    """Get all settings, merged with defaults."""
+def get_all_settings(db: Session) -> Dict[str, SettingValue]:
+    """
+    Get all settings, merged with defaults.
+
+    Returns a dictionary of all settings with proper typing.
+    Database values override defaults.
+    """
     settings = dict(DEFAULT_SETTINGS)
-    
+
     stored = db.query(Setting).all()
     for s in stored:
         try:
             settings[s.key] = json.loads(s.value)
         except json.JSONDecodeError:
             settings[s.key] = s.value
-    
+
     return settings
 
 
-def get_llm_config(db: Session) -> Dict[str, Any]:
+def get_llm_config(db: Session) -> Union[OllamaConfig, OpenAIConfig, AnthropicConfig]:
     """
     Get the active LLM configuration.
     
@@ -150,9 +240,16 @@ def get_llm_config(db: Session) -> Dict[str, Any]:
     return config
 
 
-def get_source_folders(db: Session) -> Dict[str, List[str]]:
-    """Get source folder configuration."""
-    return get_setting(db, "sources") or DEFAULT_SETTINGS["sources"]
+def get_source_folders(db: Session) -> SourcesConfig:
+    """
+    Get source folder configuration.
+
+    Returns the sources configuration with include/exclude lists.
+    """
+    sources = get_setting(db, "sources")
+    if sources and isinstance(sources, dict):
+        return sources  # type: ignore
+    return DEFAULT_SETTINGS["sources"]  # type: ignore
 
 
 def add_source_folder(db: Session, path: str) -> bool:
@@ -189,3 +286,30 @@ def remove_exclude_pattern(db: Session, pattern: str) -> bool:
         sources["exclude"].remove(pattern)
         return set_setting(db, "sources", sources)
     return True
+
+
+# Export public API
+__all__ = [
+    # Type definitions
+    "OllamaConfig",
+    "OpenAIConfig",
+    "AnthropicConfig",
+    "LLMSettings",
+    "SourcesConfig",
+    "HostPathMappings",
+    "SettingValue",
+    # Database model
+    "Setting",
+    # Functions
+    "get_setting",
+    "set_setting",
+    "get_all_settings",
+    "get_llm_config",
+    "get_source_folders",
+    "add_source_folder",
+    "remove_source_folder",
+    "add_exclude_pattern",
+    "remove_exclude_pattern",
+    # Constants
+    "DEFAULT_SETTINGS",
+]

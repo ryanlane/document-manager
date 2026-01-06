@@ -83,7 +83,7 @@ function Navbar() {
   // Navigation structure
   const exploreItems = [
     { path: '/browse', match: '/browse', label: 'Browse', icon: FolderOpen },
-    { path: '/gallery', label: 'Gallery', icon: Image },
+    { path: '/browse?tab=images', match: '/browse', label: 'Gallery', icon: Image },
     { path: '/embeddings', label: 'Embeddings', icon: Orbit },
   ]
 
