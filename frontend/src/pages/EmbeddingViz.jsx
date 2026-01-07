@@ -92,12 +92,23 @@ function EmbeddingViz() {
       const res = await fetch(`/api/embeddings/visualize?${params}`)
       if (!res.ok) {
         console.error('Failed to fetch visualization:', res.status)
+        alert(`Failed to generate visualization: ${res.statusText}`)
         setLoading(false)
         setIsGenerating(false)
         return
       }
 
       const data = await res.json()
+      
+      // Check for error in response body
+      if (data.error) {
+        console.error('Visualization error:', data.error)
+        alert(`Cannot generate visualization: ${data.error}. Found ${data.count || 0} items with embeddings.`)
+        setLoading(false)
+        setIsGenerating(false)
+        return
+      }
+      
       setPoints(data.points || [])
       setCategories(data.categories || [])
       setAuthors(data.authors || [])

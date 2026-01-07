@@ -311,6 +311,20 @@ def calculate_similarity(request: SimilarityRequest):
     }
 
 
+@router.get("/embeddings/stats")
+def get_embeddings_stats(db: Session = Depends(get_db)):
+    """
+    Get statistics about embeddings in the database.
+    """
+    doc_count = db.query(RawFile).filter(RawFile.doc_embedding.isnot(None)).count()
+    chunk_count = db.query(Entry).filter(Entry.embedding.isnot(None)).count()
+    
+    return {
+        "docs_with_embeddings": doc_count,
+        "chunks_with_embeddings": chunk_count
+    }
+
+
 @router.get("/embeddings/visualize")
 def visualize_embeddings(
     source: str = 'entries',
@@ -345,19 +359,19 @@ def visualize_embeddings(
         )
         
         if category:
-            query = query.filter(RawFile.extra_meta['doc_category'].astext == category)
+            query = query.filter(RawFile.source == category)
         
         files = query.limit(limit).all()
         
         for file in files:
-            if file.doc_embedding and len(file.doc_embedding) > 0:
+            if file.doc_embedding is not None and len(file.doc_embedding) > 0:
                 embeddings.append(file.doc_embedding)
                 
                 metadata.append({
                     "file_id": file.id,
                     "title": file.filename,
-                    "category": file.extra_meta.get('doc_category', 'Unknown') if file.extra_meta else 'Unknown',
-                    "author": file.extra_meta.get('doc_author', 'Unknown') if file.extra_meta else 'Unknown',
+                    "category": file.source or 'Unknown',
+                    "author": file.author_key or 'Unknown',
                     "file_type": file.extension,
                     "filename": file.filename,
                     "summary": (file.doc_summary or "")[:100] if file.doc_summary else ""
