@@ -36,6 +36,12 @@ try:
 except ImportError:
     PYTHON_DOCX_AVAILABLE = False
 
+try:
+    import antiword
+    ANTIWORD_AVAILABLE = True
+except ImportError:
+    ANTIWORD_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -259,6 +265,30 @@ def extract_text_from_pdf(file_path: Path) -> Tuple[str, Dict[str, Any]]:
     return text.strip(), metadata
 
 
+def extract_text_from_doc_native(file_path: Path) -> Tuple[str, Dict[str, Any]]:
+    """Extract text from old .doc files using antiword library (fallback method)."""
+    metadata: Dict[str, Any] = {"extraction_method": "antiword"}
+
+    if not ANTIWORD_AVAILABLE:
+        logger.warning("antiword not available for .doc fallback extraction")
+        return "", metadata
+
+    try:
+        # antiword.extract returns the text content from .doc file
+        text = antiword.extract(str(file_path))
+
+        if text:
+            logger.info(f"Extracted {len(text)} chars from .doc using antiword: {file_path.name}")
+            return text.strip(), metadata
+        else:
+            logger.warning(f"antiword returned empty text for {file_path.name}")
+            return "", metadata
+
+    except Exception as e:
+        logger.error(f"antiword extraction failed for {file_path.name}: {e}")
+        return "", metadata
+
+
 def extract_text_from_docx_native(file_path: Path) -> Tuple[str, Dict[str, Any]]:
     """Extract text from .docx files using python-docx library (fallback method)."""
     metadata: Dict[str, Any] = {"extraction_method": "python-docx"}
@@ -331,6 +361,11 @@ def extract_text_from_document_via_tika(file_path: Path) -> Tuple[str, Dict[str,
                 logger.info(f"Trying python-docx fallback for {file_path.name}")
                 return extract_text_from_docx_native(file_path)
 
+            # Fallback to antiword for old .doc files
+            if file_path.suffix.lower() == '.doc':
+                logger.info(f"Trying antiword fallback for {file_path.name}")
+                return extract_text_from_doc_native(file_path)
+
             return "", metadata
 
         metadata["tika_content_type"] = resp.headers.get("Content-Type")
@@ -349,6 +384,11 @@ def extract_text_from_document_via_tika(file_path: Path) -> Tuple[str, Dict[str,
         if file_path.suffix.lower() == '.docx':
             logger.info(f"Tika exception, trying python-docx fallback for {file_path.name}")
             return extract_text_from_docx_native(file_path)
+
+        # Fallback to antiword for old .doc files
+        if file_path.suffix.lower() == '.doc':
+            logger.info(f"Tika exception, trying antiword fallback for {file_path.name}")
+            return extract_text_from_doc_native(file_path)
 
         return "", metadata
 

@@ -8,7 +8,8 @@
       "Bash(docker-compose logs:*)",
       "Bash(docker-compose restart:*)",
       "Bash(docker-compose up:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(docker-compose build:*)"
     ]
   }
 }
