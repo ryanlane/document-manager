@@ -2208,6 +2208,30 @@
   border-color: var(--error-color, #ef4444);
 }
 
+.providerActions .createWorkerBtn {
+  background: var(--primary-color, #3b82f6);
+  color: white;
+  border-color: var(--primary-color, #3b82f6);
+}
+
+.providerActions .createWorkerBtn:hover:not(:disabled) {
+  background: var(--primary-hover, #2563eb);
+  border-color: var(--primary-hover, #2563eb);
+  color: white;
+}
+
+.multiProviderBadge {
+  background: linear-gradient(135deg, var(--primary-color, #3b82f6) 0%, var(--accent-color, #8b5cf6) 100%);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.multiProviderBadge svg {
+  color: white;
+}
+
 /* Model Grid */
 .modelGrid {
   display: grid;

@@ -4,6 +4,7 @@ Handles LLM provider registry (servers) and distributed worker registry.
 """
 import os
 import json
+import logging
 from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from src.services import workers as workers_service
 from src.services import jobs as jobs_service
 
 router = APIRouter(tags=["servers"])
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -563,3 +565,38 @@ async def cleanup_old_workers_endpoint(days: int = 7, db: Session = Depends(get_
     """Delete stopped/stale worker records older than specified days."""
     count = workers_service.cleanup_old_workers(db, days=days)
     return {"deleted": count, "days": days}
+
+
+@router.get("/servers/multi-provider-status")
+async def get_multi_provider_status(db: Session = Depends(get_db)):
+    """
+    Get the status of multi-provider mode.
+    
+    When multiple providers are enabled and online, the worker will automatically
+    distribute work across all of them using round-robin load balancing.
+    """
+    providers = servers_service.get_enabled_providers_for_worker(db)
+    
+    # Group by capability
+    by_capability = {
+        "chat": [],
+        "embedding": [],
+        "vision": []
+    }
+    
+    for p in providers:
+        caps = p.get('capabilities', {})
+        if caps.get('chat'):
+            by_capability["chat"].append(p['name'])
+        if caps.get('embedding'):
+            by_capability["embedding"].append(p['name'])
+        if caps.get('vision'):
+            by_capability["vision"].append(p['name'])
+    
+    return {
+        "multi_provider_enabled": len(providers) > 1,
+        "active_providers": len(providers),
+        "providers": [{"id": p['id'], "name": p['name'], "type": p['provider_type'], "status": p['status']} for p in providers],
+        "by_capability": by_capability,
+        "info": "Enable multiple providers in Settings → LLM Workers. The worker will automatically distribute work across all enabled providers."
+    }

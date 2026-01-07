@@ -47,8 +47,9 @@ from src.rag.embed_entries import main as embed_main
 from src.rag.embed_docs import main as embed_docs_main
 from src.db.session import SessionLocal
 from src.db.settings import get_llm_config
-from src.llm_client import set_default_client, ensure_models_available
+from src.llm_client import set_default_client, ensure_models_available, refresh_providers
 from src.services import workers as workers_service
+from src.services import servers as servers_service
 from src.services.worker_state import WorkerState
 
 # Re-apply file handler to root logger AFTER imports (child modules may have altered config)
@@ -305,21 +306,29 @@ def run_pipeline():
             time.sleep(5)
             continue
         
-        # Refresh LLM client config from database settings
+        # Refresh LLM providers from database (multi-provider mode)
         if current_time - last_config_refresh > CONFIG_REFRESH_INTERVAL:
             try:
                 with SessionLocal() as db:
+                    # Get all enabled providers for multi-provider routing
+                    providers = servers_service.get_enabled_providers_for_worker(db)
+                    logger.info(f"Loaded {len(providers)} LLM providers from database")
+                    refresh_providers(providers)
+                    
+                    # Also update legacy single-provider config for backward compatibility
                     llm_config = get_llm_config(db)
+                    
+                    # Ensure required models are available (auto-pull if missing)
+                    if llm_config.get('provider') == 'ollama':
+                        ensure_models_available(llm_config)
+                    
+                    set_default_client(llm_config)
                 
-                # Ensure required models are available (auto-pull if missing)
-                if llm_config.get('provider') == 'ollama':
-                    ensure_models_available(llm_config)
-                
-                set_default_client(llm_config)
-                logger.info(f"Refreshed LLM config: provider={llm_config.get('provider')}, model={llm_config.get('model')}")
                 last_config_refresh = current_time
             except Exception as e:
                 logger.warning(f"Failed to refresh LLM config: {e}")
+                import traceback
+                logger.warning(traceback.format_exc())
         try:
             # 1. Ingest
             # Only run if enabled AND enough time has passed

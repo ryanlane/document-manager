@@ -410,10 +410,128 @@ class LLMClient:
             return None
 
 
+class MultiProviderClient:
+    """
+    Manages multiple LLM providers and routes requests based on availability and capability.
+    
+    This enables a single worker to distribute work across multiple providers:
+    - Local Ollama
+    - Remote Ollama (e.g., oak server)
+    - Cloud APIs (OpenAI, Anthropic)
+    """
+    
+    def __init__(self, providers: Optional[List[Dict[str, Any]]] = None):
+        """
+        Initialize with a list of provider configurations.
+        
+        Args:
+            providers: List of provider dicts from database (llm_providers table)
+        """
+        self.providers = providers or []
+        self._clients: Dict[int, LLMClient] = {}
+        self._last_used_idx = 0
+        
+    def refresh_providers(self, providers: List[Dict[str, Any]]):
+        """Update the list of available providers from database."""
+        self.providers = [p for p in providers if p.get('enabled') and p.get('status') == 'online']
+        # Clear cached clients for providers that are no longer available
+        valid_ids = {p['id'] for p in self.providers}
+        self._clients = {k: v for k, v in self._clients.items() if k in valid_ids}
+        
+    def _get_client(self, provider: Dict[str, Any]) -> LLMClient:
+        """Get or create an LLMClient for a specific provider."""
+        provider_id = provider['id']
+        if provider_id not in self._clients:
+            config = {
+                'provider': provider.get('provider_type', 'ollama'),
+                'url': provider.get('url'),
+                'model': provider.get('default_model'),
+                'embedding_model': provider.get('embedding_model'),
+                'vision_model': provider.get('vision_model'),
+                'api_key': provider.get('api_key'),
+            }
+            self._clients[provider_id] = LLMClient(config)
+        return self._clients[provider_id]
+    
+    def _get_providers_for_capability(self, capability: str) -> List[Dict[str, Any]]:
+        """Get providers that support a specific capability (chat, embedding, vision)."""
+        result = []
+        for p in self.providers:
+            caps = p.get('capabilities', {})
+            if caps.get(capability):
+                result.append(p)
+        return result
+    
+    def _select_provider(self, capability: str = 'chat') -> Optional[Dict[str, Any]]:
+        """
+        Select a provider for the given capability using round-robin.
+        Returns None if no suitable provider is available.
+        """
+        capable = self._get_providers_for_capability(capability)
+        if not capable:
+            # Fall back to any enabled provider
+            capable = self.providers
+        if not capable:
+            return None
+            
+        # Round-robin selection
+        self._last_used_idx = (self._last_used_idx + 1) % len(capable)
+        return capable[self._last_used_idx]
+    
+    def generate_json(self, prompt: str, model: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Generate JSON response, routing to an available provider."""
+        provider = self._select_provider('chat')
+        if not provider:
+            logger.error("No providers available for chat")
+            return None
+            
+        client = self._get_client(provider)
+        logger.debug(f"Routing JSON generation to: {provider['name']}")
+        return client.generate_json(prompt, model)
+    
+    def generate_text(self, prompt: str, model: Optional[str] = None) -> Optional[str]:
+        """Generate text response, routing to an available provider."""
+        provider = self._select_provider('chat')
+        if not provider:
+            logger.error("No providers available for chat")
+            return None
+            
+        client = self._get_client(provider)
+        logger.debug(f"Routing text generation to: {provider['name']}")
+        return client.generate_text(prompt, model)
+    
+    def embed_text(self, text: str, model: Optional[str] = None) -> Optional[List[float]]:
+        """Generate embeddings, routing to an available provider with embedding capability."""
+        provider = self._select_provider('embedding')
+        if not provider:
+            logger.error("No providers available for embedding")
+            return None
+            
+        client = self._get_client(provider)
+        logger.debug(f"Routing embedding to: {provider['name']}")
+        return client.embed_text(text, model)
+    
+    def describe_image(self, image_path: str, model: Optional[str] = None, prompt: Optional[str] = None) -> Optional[str]:
+        """Describe image, routing to an available provider with vision capability."""
+        provider = self._select_provider('vision')
+        if not provider:
+            logger.error("No providers available for vision")
+            return None
+            
+        client = self._get_client(provider)
+        logger.debug(f"Routing vision to: {provider['name']}")
+        return client.describe_image(image_path, model, prompt)
+    
+    def get_active_provider_names(self) -> List[str]:
+        """Get names of all active providers."""
+        return [p['name'] for p in self.providers]
+
+
 # ==================== Legacy Functions (for backward compatibility) ====================
 
 # Default client instance
 _default_client: Optional[LLMClient] = None
+_multi_provider_client: Optional[MultiProviderClient] = None
 
 def get_client(config: Optional[Dict[str, Any]] = None) -> LLMClient:
     """Get or create an LLM client instance."""
@@ -429,6 +547,57 @@ def set_default_client(config: Dict[str, Any]):
     global _default_client
     _default_client = LLMClient(config)
 
+
+def get_multi_provider_client() -> MultiProviderClient:
+    """Get or create the multi-provider client instance."""
+    global _multi_provider_client
+    if _multi_provider_client is None:
+        _multi_provider_client = MultiProviderClient()
+    return _multi_provider_client
+
+
+def refresh_providers(providers: List[Dict[str, Any]]):
+    """
+    Refresh the list of available providers from database.
+    Call this periodically in the worker loop to pick up config changes.
+    """
+    global _multi_provider_client
+    if _multi_provider_client is None:
+        _multi_provider_client = MultiProviderClient(providers)
+    else:
+        _multi_provider_client.refresh_providers(providers)
+    
+    active_names = _multi_provider_client.get_active_provider_names()
+    if active_names:
+        logger.info(f"Active LLM providers: {', '.join(active_names)}")
+    else:
+        logger.warning("No LLM providers available!")
+
+
+def generate_json_multi(prompt: str, model: str = None) -> Optional[Dict[str, Any]]:
+    """Generate JSON using multi-provider routing."""
+    client = get_multi_provider_client()
+    return client.generate_json(prompt, model)
+
+
+def generate_text_multi(prompt: str, model: str = None) -> Optional[str]:
+    """Generate text using multi-provider routing."""
+    client = get_multi_provider_client()
+    return client.generate_text(prompt, model)
+
+
+def embed_text_multi(text: str, model: str = None) -> Optional[List[float]]:
+    """Generate embeddings using multi-provider routing."""
+    client = get_multi_provider_client()
+    return client.embed_text(text, model)
+
+
+def describe_image_multi(image_path: str, model: str = None, prompt: str = None) -> Optional[str]:
+    """Describe image using multi-provider routing."""
+    client = get_multi_provider_client()
+    return client.describe_image(image_path, model, prompt)
+
+
 def generate_json(prompt: str, model: str = None) -> Optional[Dict[str, Any]]:
     if MOCK_MODE:
         logger.info("Returning MOCK LLM response")
@@ -440,7 +609,12 @@ def generate_json(prompt: str, model: str = None) -> Optional[Dict[str, Any]]:
             "summary": "This is a mock summary."
         }
     
-    # Use the default client if available (which may have db config)
+    # Use multi-provider client if available and has providers configured
+    global _multi_provider_client
+    if _multi_provider_client and _multi_provider_client.providers:
+        return _multi_provider_client.generate_json(prompt, model)
+    
+    # Fall back to default client
     client = get_client()
     if model is None:
         model = client.ollama_model
@@ -475,6 +649,12 @@ def embed_text(text: str, model: str = EMBEDDING_MODEL) -> Optional[List[float]]
         import random
         return [random.random() for _ in range(EMBEDDING_DIMENSIONS)]
 
+    # Use multi-provider client if available and has providers configured
+    global _multi_provider_client
+    if _multi_provider_client and _multi_provider_client.providers:
+        return _multi_provider_client.embed_text(text, model)
+    
+    # Fall back to legacy behavior
     url = f"{OLLAMA_URL}/api/embeddings"
 
     prompt = _sanitize_embedding_prompt(text, EMBEDDING_MAX_CHARS)

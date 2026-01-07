@@ -30,6 +30,10 @@ export default function WorkersTab({
   const [showAddWizard, setShowAddWizard] = useState(false)
   const [testingProvider, setTestingProvider] = useState(null)
 
+  // Calculate multi-provider status
+  const enabledProviders = providers.filter(p => p.enabled && p.status === 'online')
+  const isMultiProviderMode = enabledProviders.length > 1
+
   const toggleProvider = async (id, enabled) => {
     try {
       await fetch(`${API_BASE}/servers/${id}`, {
@@ -105,6 +109,14 @@ export default function WorkersTab({
             {providers.filter(p => p.provider_type !== 'ollama' && p.status === 'online').length} Cloud APIs configured
           </span>
         </div>
+        {isMultiProviderMode && (
+          <div className={`${styles.stat} ${styles.multiProviderBadge}`}>
+            <Activity size={16} />
+            <span>
+              Multi-provider mode: {enabledProviders.length} active
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Providers List */}
@@ -168,7 +180,7 @@ export default function WorkersTab({
                       <button 
                         onClick={() => toggleProvider(provider.id, !provider.enabled)}
                         className={provider.enabled ? styles.running : styles.pausedBtn}
-                        title={provider.enabled ? 'Disable' : 'Enable'}
+                        title={provider.enabled ? 'Disable (worker will stop using this provider)' : 'Enable (worker will use this provider)'}
                       >
                         <Power size={14} />
                       </button>

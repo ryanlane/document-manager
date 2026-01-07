@@ -477,3 +477,39 @@ def get_cloud_providers(db: Session, enabled_only: bool = False) -> List[LLMProv
     if enabled_only:
         query = query.filter(LLMProvider.enabled == True)
     return query.order_by(LLMProvider.priority.desc(), LLMProvider.name).all()
+
+
+def get_enabled_providers_for_worker(db: Session) -> List[Dict[str, Any]]:
+    """
+    Get all enabled and online providers with full config for worker use.
+    This includes API keys (for cloud providers) needed for LLM calls.
+    """
+    providers = get_all_servers(db, enabled_only=True)
+    result = []
+    
+    for server in providers:
+        # Skip providers that are offline or unconfigured
+        if server.status not in ('online', 'unknown'):
+            continue
+            
+        provider_config = {
+            "id": server.id,
+            "name": server.name,
+            "url": server.url,
+            "enabled": server.enabled,
+            "status": server.status,
+            "provider_type": server.provider_type or PROVIDER_OLLAMA,
+            "default_model": server.default_model,
+            "capabilities": server.capabilities or {},
+            "priority": server.priority,
+            # Include API key for cloud providers (needed for actual LLM calls)
+            "api_key": server.api_key,
+            # Model info from config or last known
+            "embedding_model": (server.capabilities or {}).get('embedding_model'),
+            "vision_model": (server.capabilities or {}).get('vision_model'),
+        }
+        result.append(provider_config)
+    
+    # Sort by priority (highest first)
+    result.sort(key=lambda x: x.get('priority', 0), reverse=True)
+    return result

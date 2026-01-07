@@ -21,7 +21,7 @@ from sqlalchemy import text, func
 from src.db.session import SessionLocal
 from src.db.models import RawFile
 from src.db.settings import get_llm_config
-from src.llm_client import LLMClient
+from src.llm_client import LLMClient, get_multi_provider_client
 from src.constants import DOC_ENRICH_BATCH_SIZE
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -74,9 +74,10 @@ def get_doc_sample(raw_file: RawFile) -> str:
     return f"{begin}\n\n[...]\n\n{middle}\n\n[...]\n\n{end}"
 
 
-def enrich_single_doc(raw_file: RawFile, llm_client: LLMClient) -> Optional[Dict[str, Any]]:
+def enrich_single_doc(raw_file: RawFile, llm_client) -> Optional[Dict[str, Any]]:
     """
     Enrich a single document with doc-level metadata.
+    Uses multi-provider client for load distribution.
     Returns the enrichment result or None on failure.
     """
     try:
@@ -115,9 +116,16 @@ def enrich_docs_batch(limit: int = DOC_ENRICH_BATCH_SIZE) -> int:
     """
     db = SessionLocal()
     
-    # Get LLM config from database settings
-    llm_config = get_llm_config(db)
-    llm_client = LLMClient(llm_config)
+    # Prefer multi-provider client if available, fall back to single config
+    multi_client = get_multi_provider_client()
+    if multi_client.providers:
+        llm_client = multi_client
+        logger.debug(f"Using multi-provider mode with {len(multi_client.providers)} providers")
+    else:
+        # Fall back to legacy single-provider mode
+        llm_config = get_llm_config(db)
+        llm_client = LLMClient(llm_config)
+    
     enriched_count = 0
     
     try:
