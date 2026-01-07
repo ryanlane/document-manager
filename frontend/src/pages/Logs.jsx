@@ -92,11 +92,15 @@ function Logs() {
       // Extract entry/file ID if present
       const idMatch = message.match(/(?:entry|file)\s+(\d+)/i)
       const entityId = idMatch ? parseInt(idMatch[1]) : null
-      
+
+      // Parse timestamp as UTC (Python logger writes in UTC)
+      // Format: 2026-01-06 22:11:22,631 -> parse as UTC then display in local time
+      const timestampUTC = new Date(timestamp.replace(',', '.') + 'Z')
+
       return {
         id: index,
         raw: line,
-        timestamp: new Date(timestamp.replace(',', '.')),
+        timestamp: timestampUTC,
         timestampStr: timestamp,
         module,
         level,
@@ -206,12 +210,15 @@ function Logs() {
 
   const formatTimestamp = (log) => {
     if (!log.timestamp) return ''
-    return log.timestamp.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+    // Display in user's local timezone with milliseconds
+    const time = log.timestamp.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
     })
+    const ms = log.timestamp.getMilliseconds().toString().padStart(3, '0')
+    return `${time}.${ms}`
   }
 
   const downloadLogs = () => {

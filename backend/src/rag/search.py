@@ -127,7 +127,11 @@ def search_chunks_stage2(
     if not doc_ids:
         return []
     
+    # Set IVFFlat probes for Stage 2 (can be lower than Stage 1 since we're searching fewer docs)
+    db.execute(text("SET ivfflat.probes = 5"))
+    
     # Use RRF for hybrid ranking within the filtered doc set
+    # Optimized: Use LEFT JOIN instead of FULL OUTER JOIN and limit CTEs
     sql = text("""
         WITH vector_ranked AS (
             SELECT e.id,
@@ -136,6 +140,7 @@ def search_chunks_stage2(
             FROM entries e
             WHERE e.file_id = ANY(:doc_ids)
               AND e.embedding IS NOT NULL
+            LIMIT :cte_limit
         ),
         keyword_ranked AS (
             SELECT e.id,
@@ -143,17 +148,18 @@ def search_chunks_stage2(
                    ROW_NUMBER() OVER (ORDER BY ts_rank_cd(e.search_vector, plainto_tsquery('english', :query)) DESC NULLS LAST) as keyword_rank
             FROM entries e
             WHERE e.file_id = ANY(:doc_ids)
+            LIMIT :cte_limit
         ),
         rrf_combined AS (
             SELECT 
-                COALESCE(v.id, k.id) as id,
-                COALESCE(v.vector_score, 0) as vector_score,
+                v.id,
+                v.vector_score,
                 COALESCE(k.keyword_score, 0) as keyword_score,
                 -- RRF with k=RRF_K, weight vector 0.7, keyword 0.3
-                (0.7 / (:rrf_k + COALESCE(v.vector_rank, 99999))) + 
-                (0.3 / (:rrf_k + COALESCE(k.keyword_rank, 99999))) as rrf_score
+                (0.7 / (:rrf_k + v.vector_rank)) + 
+                (0.3 / (:rrf_k + COALESCE(k.keyword_rank, :cte_limit))) as rrf_score
             FROM vector_ranked v
-            FULL OUTER JOIN keyword_ranked k ON v.id = k.id
+            LEFT JOIN keyword_ranked k ON v.id = k.id
         )
         SELECT id, vector_score, keyword_score, rrf_score
         FROM rrf_combined
@@ -166,6 +172,7 @@ def search_chunks_stage2(
         "query": query,
         "doc_ids": doc_ids,
         "limit": k,
+        "cte_limit": k * 10,  # Limit CTEs to 10x final results for efficiency
         "rrf_k": float(RRF_K)
     }).fetchall()
     
