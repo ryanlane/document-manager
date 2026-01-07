@@ -25,6 +25,7 @@ router = APIRouter(tags=["search"])
 class AskRequest(BaseModel):
     query: str
     k: int = 5
+    offset: int = 0  # For pagination
     model: Optional[str] = None
     filters: Optional[dict] = None
     search_mode: Optional[str] = 'hybrid'
@@ -34,6 +35,8 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     sources: list
+    total_found: int  # Total matching results before pagination
+    has_more: bool  # Whether there are more results available
 
 
 class ChatMessage(BaseModel):
@@ -74,35 +77,67 @@ def ask(request: AskRequest, db: Session = Depends(get_db)):
     search_mode = request.search_mode or 'hybrid'
     vector_weight = request.vector_weight or 0.7
     
+    # Fetch extra results for deduplication
+    fetch_k = request.k * 3  # Fetch 3x results to ensure we have enough after dedup
+    
     results = search_entries_semantic(
         db, 
         request.query, 
-        k=request.k, 
+        k=fetch_k, 
         filters=request.filters or {},
         mode=search_mode,
         vector_weight=vector_weight
     )
     
     if not results:
-        return AskResponse(answer="I couldn't find any relevant documents in the archive.", sources=[])
+        return AskResponse(
+            answer="I couldn't find any relevant documents in the archive.", 
+            sources=[], 
+            total_found=0, 
+            has_more=False
+        )
     
-    # 2. Build Context
+    # 2. Build Context with deduplication by file_id
+    # Keep only the most relevant chunk per document
     context_parts = []
-    sources = []
-    for i, entry in enumerate(results):
+    all_unique_sources = []
+    seen_files = set()
+    
+    # First pass: deduplicate all results
+    for entry in results:
+        # Skip if we've already included this file
+        if entry.file_id in seen_files:
+            continue
+            
+        seen_files.add(entry.file_id)
+        
         # Fallback to filename if title is missing
         title = entry.title
         if not title and entry.raw_file:
             # Use filename without extension
             title = os.path.splitext(entry.raw_file.filename)[0]
             
-        context_parts.append(f"Document {i+1}:\nTitle: {title}\nContent: {entry.entry_text}\n")
-        sources.append({
+        all_unique_sources.append({
             "id": entry.id,
             "file_id": entry.file_id,
             "title": title,
-            "path": entry.raw_file.path if entry.raw_file else None
+            "path": entry.raw_file.path if entry.raw_file else None,
+            "entry_text": entry.entry_text
         })
+    
+    # Apply pagination to deduplicated results
+    total_found = len(all_unique_sources)
+    start_idx = request.offset
+    end_idx = start_idx + request.k
+    paginated_sources = all_unique_sources[start_idx:end_idx]
+    has_more = end_idx < total_found
+    
+    # Build context from paginated sources
+    for i, source in enumerate(paginated_sources):
+        context_parts.append(f"Document {i+1}:\nTitle: {source['title']}\nContent: {source['entry_text']}\n")
+    
+    # Remove entry_text from response (not needed in frontend)
+    sources = [{k: v for k, v in s.items() if k != 'entry_text'} for s in paginated_sources]
     
     context = "\n".join(context_parts)
     
@@ -124,7 +159,12 @@ Question: {request.query}
     if not answer:
         raise HTTPException(status_code=500, detail="Failed to generate answer")
         
-    return AskResponse(answer=answer, sources=sources)
+    return AskResponse(
+        answer=answer, 
+        sources=sources, 
+        total_found=total_found, 
+        has_more=has_more
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)

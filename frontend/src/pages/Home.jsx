@@ -17,6 +17,7 @@ function Home() {
   const [searchMode, setSearchMode] = useState(localStorage.getItem('search_mode') || 'hybrid')
   const [searchExplanation, setSearchExplanation] = useState(null)
   const [numResults, setNumResults] = useState(parseInt(localStorage.getItem('num_results') || '10', 10))
+  const [currentPage, setCurrentPage] = useState(0)
   const [filters, setFilters] = useState({
     author: '',
     tags: '',
@@ -66,19 +67,22 @@ function Home() {
     }
   }, [isConnected, statusError, fetchStatus])
 
-  const handleSearch = async (e) => {
-    e.preventDefault()
+  const handleSearch = async (e, page = 0) => {
+    e?.preventDefault()
     if (!query.trim()) return
 
     setLoading(true)
     setResult(null)
     setSearchExplanation(null)
+    setCurrentPage(page)
 
     const activeFilters = {}
     if (filters.author) activeFilters.author = filters.author
     if (filters.extension) activeFilters.extension = filters.extension
     if (filters.category) activeFilters.category = filters.category
     if (filters.tags) activeFilters.tags = filters.tags.split(',').map(t => t.trim()).filter(Boolean)
+
+    const offset = page * numResults
 
     try {
       // Use two-stage search for better performance on large collections
@@ -158,6 +162,7 @@ function Home() {
           body: JSON.stringify({ 
             query, 
             k: numResults,
+            offset: offset,
             model: selectedModel,
             filters: Object.keys(activeFilters).length > 0 ? activeFilters : null,
             search_mode: searchMode
@@ -203,7 +208,7 @@ function Home() {
         </div>
       )}
       
-      <form className={styles.searchForm} onSubmit={handleSearch}>
+      <form className={styles.searchForm} onSubmit={(e) => handleSearch(e, 0)}>
         <textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -372,7 +377,16 @@ function Home() {
 
           {result.sources && result.sources.length > 0 && (
             <div className={styles.sources}>
-              <h4>Sources</h4>
+              <h4>
+                Sources ({result.sources.length}
+                {result.total_found && result.total_found > result.sources.length && (
+                  <span> of {result.total_found}+ total</span>
+                )})
+              </h4>
+              <p className={styles.sourcesNote}>
+                Showing unique documents (one result per document)
+                {currentPage > 0 && ` • Page ${currentPage + 1}`}
+              </p>
               {result.sources.map((source, index) => (
                 <div key={index} className={styles.sourceItem}>
                   <span className={styles.sourceLink}>
@@ -394,6 +408,30 @@ function Home() {
                   <small className={styles.sourcePath}>{source.path}</small>
                 </div>
               ))}
+              
+              {/* Pagination Controls */}
+              {(currentPage > 0 || result.has_more) && (
+                <div className={styles.paginationControls}>
+                  <button
+                    onClick={() => handleSearch(null, currentPage - 1)}
+                    disabled={currentPage === 0 || loading}
+                    className={styles.paginationBtn}
+                  >
+                    ← Previous
+                  </button>
+                  <span className={styles.pageInfo}>
+                    Page {currentPage + 1}
+                    {result.total_found && ` of ${Math.ceil(result.total_found / numResults)}`}
+                  </span>
+                  <button
+                    onClick={() => handleSearch(null, currentPage + 1)}
+                    disabled={!result.has_more || loading}
+                    className={styles.paginationBtn}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
