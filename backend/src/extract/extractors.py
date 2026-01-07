@@ -30,6 +30,12 @@ try:
 except ImportError:
     PYMUPDF_AVAILABLE = False
 
+try:
+    from docx import Document
+    PYTHON_DOCX_AVAILABLE = True
+except ImportError:
+    PYTHON_DOCX_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -253,6 +259,48 @@ def extract_text_from_pdf(file_path: Path) -> Tuple[str, Dict[str, Any]]:
     return text.strip(), metadata
 
 
+def extract_text_from_docx_native(file_path: Path) -> Tuple[str, Dict[str, Any]]:
+    """Extract text from .docx files using python-docx library (fallback method)."""
+    metadata: Dict[str, Any] = {"extraction_method": "python-docx"}
+
+    if not PYTHON_DOCX_AVAILABLE:
+        logger.warning("python-docx not available for fallback extraction")
+        return "", metadata
+
+    try:
+        doc = Document(file_path)
+
+        # Extract all paragraph text
+        paragraphs = []
+        for paragraph in doc.paragraphs:
+            text = paragraph.text.strip()
+            if text:
+                paragraphs.append(text)
+
+        # Extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text = cell.text.strip()
+                    if text:
+                        paragraphs.append(text)
+
+        full_text = "\n\n".join(paragraphs)
+
+        # Extract metadata
+        if doc.core_properties:
+            metadata["author"] = doc.core_properties.author
+            metadata["title"] = doc.core_properties.title
+            metadata["subject"] = doc.core_properties.subject
+
+        logger.info(f"Extracted {len(full_text)} chars from .docx using python-docx: {file_path.name}")
+        return full_text.strip(), metadata
+
+    except Exception as e:
+        logger.error(f"python-docx extraction failed for {file_path.name}: {e}")
+        return "", metadata
+
+
 def extract_text_from_document_via_tika(file_path: Path) -> Tuple[str, Dict[str, Any]]:
     """Extract text from office/rtf documents via Apache Tika server."""
     tika_url = os.environ.get("TIKA_URL", "http://tika:9998").rstrip("/")
@@ -275,15 +323,33 @@ def extract_text_from_document_via_tika(file_path: Path) -> Tuple[str, Dict[str,
             )
         if not resp.ok:
             logger.warning(
-                f"Tika extraction failed for {file_path.name}: {resp.status_code} {resp.text[:200]}"
+                f"Tika extraction failed for {file_path.name}: {resp.status_code}"
             )
+
+            # Fallback to python-docx for .docx files
+            if file_path.suffix.lower() == '.docx':
+                logger.info(f"Trying python-docx fallback for {file_path.name}")
+                return extract_text_from_docx_native(file_path)
+
             return "", metadata
 
         metadata["tika_content_type"] = resp.headers.get("Content-Type")
         text = resp.text or ""
+
+        # If Tika returned empty text for .docx, try fallback
+        if not text.strip() and file_path.suffix.lower() == '.docx':
+            logger.info(f"Tika returned empty text, trying python-docx fallback for {file_path.name}")
+            return extract_text_from_docx_native(file_path)
+
         return text.strip(), metadata
     except Exception as e:
         logger.warning(f"Tika extraction error for {file_path}: {e}")
+
+        # Fallback to python-docx for .docx files
+        if file_path.suffix.lower() == '.docx':
+            logger.info(f"Tika exception, trying python-docx fallback for {file_path.name}")
+            return extract_text_from_docx_native(file_path)
+
         return "", metadata
 
 
