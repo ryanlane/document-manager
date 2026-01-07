@@ -84,8 +84,8 @@ class RawFile(Base):
     vision_model = Column(Text)  # Which vision model was used
     
     # Image metadata
-    image_width = Column(Integer)
-    image_height = Column(Integer)
+    image_width = Column(BigInteger)
+    image_height = Column(BigInteger)
     
     # Series detection fields
     series_name = Column(Text)  # Detected series name

@@ -19,6 +19,29 @@
   font-size: 1.75rem;
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.currentPhase {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: rgba(66, 184, 131, 0.15);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-success);
+}
+
+.currentPhase svg {
+  color: var(--color-success);
+}
+
 .lastUpdate {
   display: flex;
   align-items: center;
@@ -254,6 +277,61 @@
   border-radius: var(--radius-sm);
 }
 
+.pipelineTags {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Mode Badge - shows chunk enrichment mode */
+.modeBadge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.modeBadge:hover {
+  filter: brightness(1.1);
+}
+
+.modeBadge.modenone {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.modeBadge.modeembedonly {
+  background: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+}
+
+.modeBadge.modefull {
+  background: rgba(255, 197, 23, 0.15);
+  color: #ffc517;
+}
+
+/* Mode Info Banner */
+.modeInfoBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-md);
+}
+
+.modeInfoBanner svg {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
 /* Model Info Row */
 .modelInfo {
   display: flex;
@@ -442,6 +520,26 @@
   color: var(--color-error);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
+}
+
+/* Phase Context - explains what's happening and why */
+.phaseContext {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(100, 108, 255, 0.08);
+  border-left: 3px solid rgba(100, 108, 255, 0.5);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.phaseContext svg {
+  flex-shrink: 0;
+  color: rgba(100, 108, 255, 0.7);
 }
 
 /* Secondary Row */

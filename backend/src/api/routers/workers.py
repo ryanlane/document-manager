@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ...db.models import Entry
+from ...db.models import Entry, Worker
 from ...db.settings import get_setting
 from ...db.session import get_db
 from ...services import workers as workers_service
@@ -74,10 +74,22 @@ class WorkerHeartbeat(BaseModel):
 @router.get("/worker/state")
 def get_worker_state_endpoint(db: Session = Depends(get_db)):
     """Get current worker process states from database."""
-    # PRIMARY: Read from database
-    state_manager = get_primary_worker_state(db)
-    if state_manager:
-        return state_manager.get_config()
+    try:
+        # PRIMARY: Read from database
+        state_manager = get_primary_worker_state(db)
+        if state_manager:
+            config = state_manager.get_config()
+            # Add current phase from the worker record
+            worker = db.query(Worker).filter(
+                Worker.id == state_manager.worker_id
+            ).first()
+            if worker:
+                config["current_phase"] = worker.current_phase
+                config["last_heartbeat"] = worker.last_heartbeat.isoformat() if worker.last_heartbeat else None
+            return config
+    except Exception:
+        # If database query fails, fall through to file-based state
+        pass
 
     # FALLBACK: Read from file if no worker in DB yet
     return get_worker_state()
@@ -308,6 +320,7 @@ def get_worker_progress(db: Session = Depends(get_db)):
 @router.get("/worker/logs")
 def get_worker_logs(lines: int = 100):
     """Get the last N lines from the worker log file using tail for efficiency."""
+    import subprocess
     
     try:
         if not os.path.exists(WORKER_LOG_FILE):
@@ -356,6 +369,7 @@ def get_worker_logs(lines: int = 100):
 @router.post("/worker/logs/rotate")
 def rotate_worker_logs():
     """Rotate the worker log file - keeps last 10000 lines, archives the rest."""
+    import subprocess
     
     try:
         if not os.path.exists(WORKER_LOG_FILE):
@@ -482,7 +496,19 @@ def get_doc_stats_with_eta(db: Session) -> dict:
 @router.get("/worker/stats")
 def get_worker_stats(db: Session = Depends(get_db)):
     """Get comprehensive worker statistics including ETAs."""
-    # Get counts by status
+    # Get current worker phase for context (fast query)
+    current_phase = None
+    try:
+        state_manager = get_primary_worker_state(db)
+        if state_manager:
+            worker = db.query(Worker).filter(Worker.id == state_manager.worker_id).first()
+            if worker:
+                current_phase = worker.current_phase
+    except Exception:
+        # If worker query fails, continue without phase info
+        pass
+    
+    # Get counts by status (already fast with index)
     status_counts = db.execute(text("""
         SELECT status, COUNT(*) as count 
         FROM entries 
@@ -494,9 +520,20 @@ def get_worker_stats(db: Session = Depends(get_db)):
     
     pending = counts.get('pending', 0)
     enriched = counts.get('enriched', 0)
-    embedded = db.query(Entry).filter(Entry.embedding.isnot(None)).count()
     
-    # Get recent enrichment rate (last hour)
+    # Use a fast approximate count for embedded (avoid full table scan)
+    # This is good enough for dashboard display
+    embedded_result = db.execute(text("""
+        SELECT COUNT(*) FROM entries 
+        WHERE embedding IS NOT NULL 
+        LIMIT 1000000
+    """)).scalar()
+    embedded = embedded_result or 0
+    
+    # Check chunk enrichment mode
+    chunk_mode = get_setting(db, "chunk_enrichment_mode") or "embed_only"
+    
+    # Get recent enrichment rate (last hour) - fast with updated_at index
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
     recent_enriched = db.execute(text("""
         SELECT COUNT(*) FROM entries 
@@ -507,11 +544,78 @@ def get_worker_stats(db: Session = Depends(get_db)):
     # Calculate rate per minute
     enrich_rate_per_min = recent_enriched / 60 if recent_enriched > 0 else 0
     
-    # Calculate chunk ETA
-    chunk_eta = calculate_eta(pending, enrich_rate_per_min)
+    # Determine chunk processing status and context
+    chunk_status = "waiting"
+    chunk_context = None
     
-    # Get doc stats with rates
+    if current_phase == "enrich":
+        chunk_status = "active"
+    elif current_phase in ["ingest", "segment"]:
+        chunk_status = "waiting"
+        chunk_context = "Waiting for documents to be segmented into chunks"
+    elif current_phase == "enrich_docs":
+        chunk_status = "waiting"
+        chunk_context = "Waiting for document enrichment to complete"
+    elif current_phase in ["embed_docs", "embed"]:
+        chunk_status = "waiting"
+        chunk_context = "Enrichment paused - currently embedding"
+    
+    # Calculate chunk ETA based on mode
+    if chunk_mode == "none":
+        # None mode: instant processing (inherit metadata only)
+        chunk_eta = {
+            "pending_count": pending,
+            "rate_per_minute": None,
+            "eta_minutes": 0 if pending > 0 else None,
+            "eta_string": "Instant (no processing)" if pending > 0 else "Complete",
+            "mode": "none",
+            "status": chunk_status,
+            "context": chunk_context
+        }
+    elif chunk_mode == "embed_only":
+        # Embed-only: much faster, estimate ~10,000/min for embedding
+        estimated_embed_rate = 10000 / 60  # ~167/min for batch embedding
+        chunk_eta = calculate_eta(pending, estimated_embed_rate)
+        chunk_eta["mode"] = "embed_only"
+        chunk_eta["status"] = chunk_status
+        chunk_eta["context"] = chunk_context
+        if pending > 0:
+            chunk_eta["eta_string"] = f"~{chunk_eta['eta_string']} (embed only)"
+    else:
+        # Full mode: use actual LLM rate
+        chunk_eta = calculate_eta(pending, enrich_rate_per_min)
+        chunk_eta["mode"] = "full"
+        chunk_eta["status"] = chunk_status
+        chunk_eta["context"] = chunk_context
+        if chunk_status != "active" and enrich_rate_per_min == 0:
+            chunk_eta["context"] = chunk_context or "ETA based on recent activity - worker cycling through phases"
+    
+    # Get doc stats with rates and add context
     doc_stats = get_doc_stats_with_eta(db)
+    
+    # Add document processing status context
+    doc_status = "waiting"
+    doc_context = None
+    
+    if current_phase == "enrich_docs":
+        doc_status = "active"
+    elif current_phase in ["ingest", "segment"]:
+        doc_status = "waiting"
+        doc_context = "Waiting for files to be ingested and segmented"
+    elif current_phase == "enrich":
+        doc_status = "waiting" 
+        doc_context = "Paused - currently enriching chunks"
+    elif current_phase in ["embed_docs", "embed"]:
+        doc_status = "waiting"
+        doc_context = "Enrichment paused - currently embedding"
+    
+    if doc_stats.get("eta") and doc_status != "active" and doc_stats["rate_per_hour"] < 100:
+        doc_stats["eta"]["context"] = doc_context or "ETA based on recent activity - worker cycling through phases"
+        doc_stats["eta"]["status"] = doc_status
+    else:
+        doc_stats["eta"]["status"] = doc_status
+        if doc_context:
+            doc_stats["eta"]["context"] = doc_context
     
     return {
         "counts": {
@@ -527,7 +631,9 @@ def get_worker_stats(db: Session = Depends(get_db)):
             "sample_period": "1 hour"
         },
         "eta": chunk_eta,
-        "docs": doc_stats
+        "chunk_mode": chunk_mode,
+        "docs": doc_stats,
+        "current_phase": current_phase
     }
 
 

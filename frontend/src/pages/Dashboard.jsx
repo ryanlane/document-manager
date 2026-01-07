@@ -90,6 +90,7 @@ function Dashboard() {
   const [systemStatus, setSystemStatus] = useState(null)
   const [workerStats, setWorkerStats] = useState(null)
   const [scheduleStatus, setScheduleStatus] = useState(null)
+  const [chunkEnrichmentMode, setChunkEnrichmentMode] = useState(null)
   
   // Secondary data - loads after
   const [storage, setStorage] = useState(null)
@@ -200,6 +201,14 @@ function Dashboard() {
       const data = await res.json()
       setScheduleStatus(data)
     } catch (err) { console.error('schedule status:', err) }
+  }, [])
+
+  const fetchChunkEnrichmentMode = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/chunk-enrichment')
+      const data = await res.json()
+      setChunkEnrichmentMode(data)
+    } catch (err) { console.error('chunk enrichment mode:', err) }
   }, [])
 
   // Lazy secondary loads
@@ -324,6 +333,7 @@ function Dashboard() {
     fetchSystemStatus()
     fetchWorkerStats()
     fetchScheduleStatus()
+    fetchChunkEnrichmentMode()
     
     // Load secondary data with slight delay
     const secondaryTimer = setTimeout(() => {
@@ -419,11 +429,27 @@ function Dashboard() {
       {/* Header */}
       <div className={styles.header}>
         <h1>Dashboard</h1>
-        {lastUpdate && (
-          <span className={styles.lastUpdate}>
-            <Clock size={14} /> {lastUpdate.toLocaleTimeString()}
-          </span>
-        )}
+        <div className={styles.headerRight}>
+          {workerState?.running && workerState?.current_phase && (
+            <div className={styles.currentPhase}>
+              <Loader2 size={14} className={styles.spin} />
+              <span>Processing: {
+                workerState.current_phase === 'ingest' ? 'Ingesting Files' :
+                workerState.current_phase === 'segment' ? 'Segmenting Documents' :
+                workerState.current_phase === 'enrich_docs' ? 'Enriching Documents' :
+                workerState.current_phase === 'enrich' ? 'Enriching Chunks' :
+                workerState.current_phase === 'embed_docs' ? 'Embedding Documents' :
+                workerState.current_phase === 'embed' ? 'Embedding Chunks' :
+                workerState.current_phase
+              }</span>
+            </div>
+          )}
+          {lastUpdate && (
+            <span className={styles.lastUpdate}>
+              <Clock size={14} /> {lastUpdate.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Worker Controls - Compact */}
@@ -580,6 +606,14 @@ function Dashboard() {
             </div>
           )}
           
+          {/* Phase status context */}
+          {workerStats?.docs?.eta?.context && (
+            <div className={styles.phaseContext}>
+              <Clock size={12} />
+              <span>{workerStats.docs.eta.context}</span>
+            </div>
+          )}
+          
           {/* Rate info for doc processing */}
           {workerStats?.docs?.rate_per_hour > 0 && (
             <div className={styles.etaInfo}>
@@ -595,11 +629,39 @@ function Dashboard() {
         <div className={styles.pipelineCard}>
           <div className={styles.pipelineHeader}>
             <h2><Layers size={18} /> Chunk-Level</h2>
-            <span className={styles.pipelineTag}>Stage 2: Fine Search</span>
+            <div className={styles.pipelineTags}>
+              <span className={styles.pipelineTag}>Stage 2: Fine Search</span>
+              {chunkEnrichmentMode && (
+                <Link 
+                  to="/settings?tab=workers" 
+                  className={`${styles.modeBadge} ${styles[`mode${chunkEnrichmentMode.mode?.replace('_', '')}`]}`}
+                  title={`Chunk processing mode: ${chunkEnrichmentMode.modes?.[chunkEnrichmentMode.mode]?.name || chunkEnrichmentMode.mode}. Click to change.`}
+                >
+                  {chunkEnrichmentMode.mode === 'none' && <Zap size={10} />}
+                  {chunkEnrichmentMode.mode === 'embed_only' && <Binary size={10} />}
+                  {chunkEnrichmentMode.mode === 'full' && <Sparkles size={10} />}
+                  {chunkEnrichmentMode.modes?.[chunkEnrichmentMode.mode]?.name || chunkEnrichmentMode.mode}
+                </Link>
+              )}
+            </div>
           </div>
           
-          {/* Model Info for Chunk-Level */}
-          {systemStatus?.ollama && (
+          {/* Mode-specific info banner */}
+          {chunkEnrichmentMode?.mode === 'none' && (
+            <div className={styles.modeInfoBanner}>
+              <Zap size={14} />
+              <span>Fast mode: Chunks inherit metadata from documents. No LLM or embedding needed.</span>
+            </div>
+          )}
+          {chunkEnrichmentMode?.mode === 'embed_only' && (
+            <div className={styles.modeInfoBanner}>
+              <Binary size={14} />
+              <span>Embed-only: Chunks are embedded for search but skip LLM enrichment.</span>
+            </div>
+          )}
+          
+          {/* Model Info for Chunk-Level - only show for full mode */}
+          {chunkEnrichmentMode?.mode === 'full' && systemStatus?.ollama && (
             <div className={styles.modelInfo}>
               <div className={styles.modelBadge} title="LLM used for chunk enrichment">
                 <Sparkles size={12} />
@@ -638,38 +700,52 @@ function Dashboard() {
               value={counts?.entries.enriched}
               loading={!counts}
             />
-            <StatCard 
-              icon={Cpu} 
-              color="#ff6464" 
-              title="Embedded" 
-              value={counts?.entries.embedded}
-              loading={!counts}
-            />
+            {chunkEnrichmentMode?.mode !== 'none' && (
+              <StatCard 
+                icon={Cpu} 
+                color="#ff6464" 
+                title="Embedded" 
+                value={counts?.entries.embedded}
+                loading={!counts}
+              />
+            )}
           </div>
           <div className={styles.progressStack}>
             <ProgressBar 
               percent={chunkEnrichPct} 
-              color="#ffc517" 
-              label="Chunk Enrichment" 
+              color={chunkEnrichmentMode?.mode === 'none' ? '#42b883' : '#ffc517'} 
+              label={chunkEnrichmentMode?.mode === 'none' ? 'Chunk Processing (Inherited)' : 
+                     chunkEnrichmentMode?.mode === 'embed_only' ? 'Chunk Processing (Fast)' : 
+                     'Chunk Enrichment (LLM)'}
               sublabel={counts ? `${counts.entries.enriched?.toLocaleString()} / ${counts.entries.total?.toLocaleString()}` : null}
               loading={!counts}
               active={workerState?.enrich}
               paused={!workerState?.running || !workerState?.enrich}
-              eta={workerStats?.eta}
+              eta={chunkEnrichmentMode?.mode === 'full' ? workerStats?.eta : null}
             />
-            <ProgressBar 
-              percent={chunkEmbedPct} 
-              color="#ff6464" 
-              label="Chunk Embedding" 
-              sublabel={counts ? `${counts.entries.embedded?.toLocaleString()} / ${counts.entries.total?.toLocaleString()}` : null}
-              loading={!counts}
-              active={workerState?.embed}
-              paused={!workerState?.running || !workerState?.embed}
-            />
+            {chunkEnrichmentMode?.mode !== 'none' && (
+              <ProgressBar 
+                percent={chunkEmbedPct} 
+                color="#ff6464" 
+                label="Chunk Embedding" 
+                sublabel={counts ? `${counts.entries.embedded?.toLocaleString()} / ${counts.entries.total?.toLocaleString()}` : null}
+                loading={!counts}
+                active={workerState?.embed}
+                paused={!workerState?.running || !workerState?.embed}
+              />
+            )}
           </div>
           
-          {/* Rate info for chunk processing */}
-          {workerStats?.rates?.enrich_per_hour > 0 && (
+          {/* Phase status context */}
+          {workerStats?.eta?.context && (
+            <div className={styles.phaseContext}>
+              <Clock size={12} />
+              <span>{workerStats.eta.context}</span>
+            </div>
+          )}
+          
+          {/* Rate info for chunk processing - only for full mode */}
+          {chunkEnrichmentMode?.mode === 'full' && workerStats?.rates?.enrich_per_hour > 0 && (
             <div className={styles.etaInfo}>
               <Zap size={12} />
               <span>{workerStats.rates.enrich_per_hour}/hr</span>
