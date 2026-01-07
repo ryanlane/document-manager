@@ -901,7 +901,7 @@ async def analyze_image(image_id: int, model: Optional[str] = None, db: Session 
     
     return {
         "image_id": image_id,
-        "description": description,
+        "vision_description": description,
         "model": image.vision_model
     }
 
@@ -1014,6 +1014,7 @@ def inspect_entry(entry_id: int, db: Session = Depends(get_db)):
 @router.get("/entries/{entry_id}/debug")
 def entry_debug_info(entry_id: int, db: Session = Depends(get_db)):
     """Get debug information for an entry including embedding details."""
+    import numpy as np
     
     entry = db.query(Entry).filter(Entry.id == entry_id).first()
     if not entry:
@@ -1075,6 +1076,7 @@ def get_nearby_entries(entry_id: int, k: int = 10, db: Session = Depends(get_db)
 @router.get("/entries/{entry_id}/embedding-viz")
 def get_entry_embedding_viz(entry_id: int, db: Session = Depends(get_db)):
     """Get entry embedding for visualization."""
+    import numpy as np
     
     entry = db.query(Entry).filter(Entry.id == entry_id).first()
     if not entry:

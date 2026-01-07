@@ -91,11 +91,16 @@ function Browse() {
   const fetchImages = useCallback(async () => {
     setImagesLoading(true)
     try {
-      const [sortField, sortDir] = imageSortBy.split('-')
-      let url = `/api/images?skip=${imagesPage * imagesLimit}&limit=${imagesLimit}&sort_by=${sortField}&sort_dir=${sortDir}`
+      let url = `/api/images?skip=${imagesPage * imagesLimit}&limit=${imagesLimit}`
       if (imageFilter === 'with-description') url += '&has_description=true'
       else if (imageFilter === 'without-description') url += '&has_description=false'
-
+      
+      // Add sorting
+      if (imageSortBy) {
+        const [field, order] = imageSortBy.split('-')
+        url += `&sort_by=${field}&sort_order=${order}`
+      }
+      
       const res = await fetch(url)
       const data = await res.json()
       setImages(data.items || [])
@@ -152,19 +157,34 @@ function Browse() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: selectedModel })
       })
+      
+      if (!res.ok) {
+        throw new Error(`Failed to analyze image: ${res.statusText}`)
+      }
+      
       const data = await res.json()
       
+      // Handle both 'vision_description' (new) and 'description' (old) for backward compatibility
+      const description = data.vision_description || data.description
+      
+      // Update images array
       setImages(prev => prev.map(img => 
         img.id === imageId 
-          ? { ...img, vision_description: data.vision_description, has_description: true }
+          ? { ...img, vision_description: description, has_description: true }
           : img
       ))
       
+      // Update selectedImage if it's the one being analyzed
       if (selectedImage?.id === imageId) {
-        setSelectedImage(prev => ({ ...prev, vision_description: data.vision_description }))
+        setSelectedImage(prev => ({ 
+          ...prev, 
+          vision_description: description,
+          has_description: true
+        }))
       }
     } catch (err) {
       console.error('Failed to analyze image:', err)
+      alert('Failed to generate AI description. Please try again.')
     } finally {
       setAnalyzing(false)
     }
