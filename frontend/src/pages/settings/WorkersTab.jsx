@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Server, 
   Cloud, 
@@ -13,7 +13,10 @@ import {
   WifiOff,
   Power,
   Cpu,
-  Activity
+  Activity,
+  Zap,
+  Clock,
+  FileText
 } from 'lucide-react'
 import AddProviderWizard from '../../components/AddProviderWizard'
 import WorkersPanel from '../../components/WorkersPanel'
@@ -29,10 +32,43 @@ export default function WorkersTab({
 }) {
   const [showAddWizard, setShowAddWizard] = useState(false)
   const [testingProvider, setTestingProvider] = useState(null)
+  const [chunkEnrichment, setChunkEnrichment] = useState(null)
+  const [savingEnrichment, setSavingEnrichment] = useState(false)
 
   // Calculate multi-provider status
   const enabledProviders = providers.filter(p => p.enabled && p.status === 'online')
   const isMultiProviderMode = enabledProviders.length > 1
+
+  // Load chunk enrichment settings
+  useEffect(() => {
+    loadChunkEnrichment()
+  }, [])
+
+  const loadChunkEnrichment = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/settings/chunk-enrichment`)
+      if (res.ok) {
+        setChunkEnrichment(await res.json())
+      }
+    } catch (err) {
+      console.error('Failed to load chunk enrichment settings:', err)
+    }
+  }
+
+  const updateChunkEnrichmentMode = async (mode) => {
+    setSavingEnrichment(true)
+    try {
+      await fetch(`${API_BASE}/settings/chunk-enrichment`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+      })
+      await loadChunkEnrichment()
+    } catch (err) {
+      console.error('Failed to update chunk enrichment mode:', err)
+    }
+    setSavingEnrichment(false)
+  }
 
   const toggleProvider = async (id, enabled) => {
     try {
@@ -287,6 +323,82 @@ export default function WorkersTab({
       {/* Worker Schedule Section */}
       <div className={styles.scheduleSection}>
         <WorkerSchedule />
+      </div>
+
+      {/* Chunk Enrichment Settings */}
+      <div className={styles.enrichmentSection}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2><FileText size={20} /> Chunk Processing Mode</h2>
+            <p className={styles.description}>
+              Control how individual text chunks are processed. 
+              {chunkEnrichment && (
+                <span className={styles.chunkStats}>
+                  {' '}({chunkEnrichment.pending_chunks?.toLocaleString()} pending / {chunkEnrichment.total_chunks?.toLocaleString()} total chunks)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {chunkEnrichment && (
+          <div className={styles.enrichmentModes}>
+            {/* Embed Only (Default) */}
+            <div 
+              className={`${styles.enrichmentMode} ${chunkEnrichment.mode === 'embed_only' ? styles.selected : ''}`}
+              onClick={() => updateChunkEnrichmentMode('embed_only')}
+            >
+              <div className={styles.enrichmentModeHeader}>
+                <Zap size={20} />
+                <span>Embed Only</span>
+                <span className={styles.recommendedBadge}>Recommended</span>
+                {chunkEnrichment.mode === 'embed_only' && <Check size={16} className={styles.checkmark} />}
+              </div>
+              <p>Skip LLM enrichment, just create embeddings for semantic search. Fast and effective for most use cases.</p>
+              <div className={styles.enrichmentEta}>
+                <Clock size={14} /> ~10,000 chunks/hour
+              </div>
+            </div>
+
+            {/* None */}
+            <div 
+              className={`${styles.enrichmentMode} ${chunkEnrichment.mode === 'none' ? styles.selected : ''}`}
+              onClick={() => updateChunkEnrichmentMode('none')}
+            >
+              <div className={styles.enrichmentModeHeader}>
+                <FileText size={20} />
+                <span>Skip All</span>
+                {chunkEnrichment.mode === 'none' && <Check size={16} className={styles.checkmark} />}
+              </div>
+              <p>Only use document-level metadata. Fastest option when you only need document search, not chunk-level.</p>
+              <div className={styles.enrichmentEta}>
+                <Clock size={14} /> Instant (no processing)
+              </div>
+            </div>
+
+            {/* Full */}
+            <div 
+              className={`${styles.enrichmentMode} ${chunkEnrichment.mode === 'full' ? styles.selected : ''}`}
+              onClick={() => updateChunkEnrichmentMode('full')}
+            >
+              <div className={styles.enrichmentModeHeader}>
+                <Activity size={20} />
+                <span>Full LLM Enrichment</span>
+                {chunkEnrichment.mode === 'full' && <Check size={16} className={styles.checkmark} />}
+              </div>
+              <p>Generate title, summary, and tags for each chunk via LLM. Very slow - not recommended for large archives.</p>
+              <div className={styles.enrichmentEta}>
+                <Clock size={14} /> ~1,000 chunks/hour (LLM limited)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {savingEnrichment && (
+          <div className={styles.savingOverlay}>
+            <Loader2 className={styles.spinner} size={20} /> Saving...
+          </div>
+        )}
       </div>
     </div>
   )

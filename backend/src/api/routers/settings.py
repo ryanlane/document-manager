@@ -193,6 +193,78 @@ async def test_llm_connection(provider: str = "ollama", db: Session = Depends(ge
 
 
 # ============================================================================
+# Chunk Enrichment Settings
+# ============================================================================
+
+class ChunkEnrichmentUpdate(BaseModel):
+    mode: str  # "none", "embed_only", "full"
+
+
+@router.get("/settings/chunk-enrichment")
+async def get_chunk_enrichment_settings(db: Session = Depends(get_db)):
+    """
+    Get chunk enrichment mode setting.
+    
+    Modes:
+    - none: Skip chunk LLM enrichment entirely, just inherit doc metadata
+    - embed_only: Skip LLM enrichment, still embed chunk text (default, fast)
+    - full: Full LLM enrichment per chunk (slow, not recommended for large archives)
+    """
+    mode = get_setting(db, "chunk_enrichment_mode") or "embed_only"
+    
+    # Get current pending counts for context
+    from sqlalchemy import text
+    result = db.execute(text("""
+        SELECT 
+            COUNT(*) FILTER (WHERE status = 'pending') as pending,
+            COUNT(*) FILTER (WHERE status = 'enriched') as enriched,
+            COUNT(*) as total
+        FROM entries
+    """)).fetchone()
+    
+    return {
+        "mode": mode,
+        "pending_chunks": result[0] if result else 0,
+        "enriched_chunks": result[1] if result else 0,
+        "total_chunks": result[2] if result else 0,
+        "modes": {
+            "none": {
+                "name": "Skip All",
+                "description": "Inherit doc metadata only. Fastest option, no embeddings.",
+                "recommended_for": "When you only need document-level search"
+            },
+            "embed_only": {
+                "name": "Embed Only (Default)",
+                "description": "Skip LLM enrichment, just embed chunk text. Fast and effective.",
+                "recommended_for": "Most use cases - good search quality without LLM overhead"
+            },
+            "full": {
+                "name": "Full LLM Enrichment",
+                "description": "Generate title, summary, tags for each chunk via LLM. Very slow.",
+                "recommended_for": "Small archives where per-chunk metadata is valuable"
+            }
+        }
+    }
+
+
+@router.put("/settings/chunk-enrichment")
+async def update_chunk_enrichment_settings(
+    update: ChunkEnrichmentUpdate, 
+    db: Session = Depends(get_db)
+):
+    """Update chunk enrichment mode."""
+    valid_modes = ["none", "embed_only", "full"]
+    if update.mode not in valid_modes:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid mode '{update.mode}'. Must be one of: {valid_modes}"
+        )
+    
+    set_setting(db, "chunk_enrichment_mode", update.mode)
+    return {"message": f"Chunk enrichment mode set to '{update.mode}'", "mode": update.mode}
+
+
+# ============================================================================
 # Sources Settings Endpoints
 # ============================================================================
 

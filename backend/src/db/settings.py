@@ -76,6 +76,11 @@ DEFAULT_SETTINGS = {
     "indexing_mode": "fast_scan",
     # GPU VRAM in GB (null = auto-detect, 0 = CPU only)
     "gpu_vram_gb": None,
+    # Chunk enrichment mode: "none", "embed_only", "full"
+    # - none: Skip chunk processing entirely, inherit doc metadata
+    # - embed_only: Just embed chunk text, no LLM enrichment (default, fast)
+    # - full: Full LLM enrichment per chunk (slow, 393+ days for large archives)
+    "chunk_enrichment_mode": "embed_only",
     "llm": {
         "provider": "ollama",  # ollama, openai, anthropic
         "ollama": {
@@ -129,6 +134,9 @@ def get_setting(db: Session, key: Literal["indexing_mode"]) -> Optional[str]: ..
 
 @overload
 def get_setting(db: Session, key: Literal["gpu_vram_gb"]) -> Optional[int]: ...
+
+@overload
+def get_setting(db: Session, key: Literal["chunk_enrichment_mode"]) -> Optional[str]: ...
 
 @overload
 def get_setting(db: Session, key: Literal["llm"]) -> Optional[LLMSettings]: ...

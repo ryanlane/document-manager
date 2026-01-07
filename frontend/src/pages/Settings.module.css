@@ -3173,3 +3173,107 @@
     flex-shrink: 0;
   }
 }
+
+/* ============================================================================
+   Chunk Enrichment Section
+   ============================================================================ */
+
+.enrichmentSection {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.chunkStats {
+  color: var(--text-tertiary, #666);
+  font-size: 0.9em;
+}
+
+.enrichmentModes {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.enrichmentMode {
+  background: var(--bg-secondary, #1a1a1a);
+  border: 2px solid var(--border-color, #333);
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.enrichmentMode:hover {
+  border-color: var(--text-tertiary, #666);
+  background: var(--bg-tertiary, #222);
+}
+
+.enrichmentMode.selected {
+  border-color: var(--primary-color, #3b82f6);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.enrichmentModeHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.enrichmentModeHeader span:first-of-type {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text-primary, #fff);
+}
+
+.enrichmentModeHeader svg {
+  color: var(--primary-color, #3b82f6);
+}
+
+.enrichmentMode.selected .enrichmentModeHeader svg:last-child {
+  color: var(--success-color, #22c55e);
+}
+
+.checkmark {
+  margin-left: auto;
+}
+
+.recommendedBadge {
+  background: var(--success-color, #22c55e);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.enrichmentMode p {
+  color: var(--text-secondary, #888);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem 0;
+  line-height: 1.5;
+}
+
+.enrichmentEta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-tertiary, #666);
+  font-size: 0.85rem;
+}
+
+.enrichmentEta svg {
+  color: var(--text-tertiary, #666);
+}
+
+.savingOverlay {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary, #888);
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}

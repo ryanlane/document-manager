@@ -4,14 +4,15 @@ import os
 import yaml
 import re
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import text, func, or_
 
 from src.db.session import get_db, SessionLocal
-from src.db.models import Entry
+from src.db.models import Entry, RawFile
+from src.db.settings import get_setting
 from src.llm_client import generate_json
 from src.constants import ENRICH_BATCH_SIZE, MAX_TEXT_LENGTH
 
@@ -297,6 +298,78 @@ def update_progress(current: int, total: int, entry_title: str = ""):
     except Exception as e:
         logger.warning(f"Failed to update progress: {e}")
 
+
+def fast_enrich_batch(mode: str, limit: int = 1000) -> int:
+    """
+    Fast-path enrichment for 'none' or 'embed_only' modes.
+    
+    - none: Mark chunks as enriched, inherit doc metadata, skip embedding
+    - embed_only: Mark chunks as enriched with minimal metadata for embedding
+    
+    Returns number of entries processed.
+    """
+    db = SessionLocal()
+    try:
+        # Get batch of pending entries with their raw_file info
+        entries = db.query(Entry).join(
+            RawFile, Entry.file_id == RawFile.id
+        ).filter(
+            Entry.status == 'pending',
+            or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
+        ).limit(limit).all()
+        
+        if not entries:
+            logger.info(f"No pending entries for fast enrichment ({mode} mode)")
+            return 0
+        
+        processed = 0
+        for entry in entries:
+            try:
+                # Inherit metadata from document
+                raw_file = entry.raw_file
+                if raw_file:
+                    # Extract author from path if not set
+                    if not entry.author and raw_file.path:
+                        path = raw_file.path.replace('\\', '/')
+                        path_parts = path.split('/')
+                        if 'authors' in path_parts:
+                            idx = path_parts.index('authors')
+                            if idx + 1 < len(path_parts):
+                                candidate = path_parts[idx + 1]
+                                if candidate != raw_file.filename:
+                                    entry.author = candidate
+                    
+                    # Use filename as title if not set
+                    if not entry.title:
+                        entry.title = os.path.splitext(raw_file.filename)[0]
+                    
+                    # Inherit source/author_key from raw_file
+                    entry.source = raw_file.source
+                    entry.author_key = raw_file.author_key
+                    
+                    # Extract category from path
+                    entry.category = extract_category_from_path(raw_file.path)
+                
+                # Mark as enriched (embed_entries will pick it up)
+                entry.status = 'enriched'
+                processed += 1
+                
+            except Exception as e:
+                logger.warning(f"Fast enrich error for entry {entry.id}: {e}")
+                entry.retry_count = (entry.retry_count or 0) + 1
+        
+        db.commit()
+        logger.info(f"Fast enriched {processed} entries ({mode} mode)")
+        return processed
+        
+    except Exception as e:
+        logger.error(f"Fast enrich batch error: {e}")
+        db.rollback()
+        return 0
+    finally:
+        db.close()
+
+
 def enrich_entry_worker(entry_id: int) -> tuple:
     """
     Worker function for parallel enrichment.
@@ -318,9 +391,26 @@ def enrich_entry_worker(entry_id: int) -> tuple:
 
 
 def main():
+    """
+    Main entry point for chunk enrichment.
+    
+    Behavior depends on chunk_enrichment_mode setting:
+    - 'none': Fast-path, inherit doc metadata, mark enriched (skip LLM)
+    - 'embed_only': Fast-path, inherit doc metadata, mark enriched (skip LLM, still embeds)
+    - 'full': Full LLM enrichment per chunk (original slow behavior)
+    """
     with SessionLocal() as db:
-        # Get total pending count for progress tracking
-        from sqlalchemy import or_
+        # Check enrichment mode setting
+        mode = get_setting(db, 'chunk_enrichment_mode') or 'embed_only'
+        
+        if mode in ('none', 'embed_only'):
+            # Fast path - skip LLM enrichment entirely
+            processed = fast_enrich_batch(mode, limit=ENRICH_BATCH_SIZE * 10)  # Larger batches since no LLM
+            if processed > 0:
+                logger.info(f"Fast enrichment ({mode}): processed {processed} entries")
+            return
+        
+        # Full LLM enrichment mode (original behavior)
         total_pending = db.query(func.count(Entry.id)).filter(
             Entry.status == 'pending',
             or_(Entry.retry_count.is_(None), Entry.retry_count < MAX_RETRIES)
