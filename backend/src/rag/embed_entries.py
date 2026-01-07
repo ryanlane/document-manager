@@ -144,7 +144,7 @@ def main():
         entries = db.query(Entry).filter(
             Entry.embedding.is_(None),
             Entry.status == 'enriched'
-        ).limit(BATCH_SIZE).all()
+        ).limit(EMBED_BATCH_SIZE).all()
         
         if not entries:
             break
