@@ -602,17 +602,23 @@
   font-weight: 600;
   color: var(--text-primary);
   font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mountPath {
   font-family: monospace;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mountStats {
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .addMountBtn {
@@ -2493,11 +2499,46 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   margin-bottom: 0.375rem;
+}
+
+.activeItem.missing {
+  border-color: color-mix(in srgb, var(--error-color) 50%, transparent);
+  background: color-mix(in srgb, var(--error-color) 5%, var(--bg-secondary));
+}
+
+.activeItemStatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.activeItemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.activeItemPath {
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeItemStats {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 
 .activeItem span {
@@ -2518,6 +2559,26 @@
   color: var(--text-secondary);
   font-size: 0.75rem;
   white-space: nowrap;
+}
+
+.removeActiveBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.removeActiveBtn:hover {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  color: var(--error-color);
 }
 
 .activeItem button {

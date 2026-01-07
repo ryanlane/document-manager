@@ -141,18 +141,20 @@ export default function SourcesTab({
           <div className={styles.mountsGrid}>
             {availableMounts.mounts.map((mount, idx) => {
               const isAdded = sources.include?.some(s => s.path === mount.path)
+              const displayName = mount.path ? mount.path.split('/').filter(Boolean).pop() : (mount.name || 'Unknown')
               return (
                 <div key={idx} className={`${styles.mount} ${isAdded ? styles.added : ''}`}>
                   <div className={styles.mountInfo}>
-                    <span className={styles.mountName}>{mount.name}</span>
-                    <span className={styles.mountStats}>{mount.file_count} files</span>
+                    <span className={styles.mountName} title={mount.path || mount.name}>{displayName}</span>
+                    {mount.path && <span className={styles.mountPath}>{mount.path}</span>}
+                    <span className={styles.mountStats}>{mount.file_count || 0} files</span>
                   </div>
                   {isAdded ? (
-                    <button onClick={() => removeSourceFolder(mount.path)} className={styles.removeBtn}>
+                    <button onClick={() => removeSourceFolder(mount.path)} className={styles.removeBtn} title="Remove from active sources">
                       <Trash2 size={14} />
                     </button>
                   ) : (
-                    <button onClick={() => addSourceFolder(mount.path)} className={styles.addMountBtn}>
+                    <button onClick={() => addSourceFolder(mount.path)} className={styles.addMountBtn} title="Add to active sources">
                       <Plus size={14} />
                     </button>
                   )}
@@ -226,11 +228,27 @@ export default function SourcesTab({
       <div className={styles.activeList}>
         <h4>Active Sources ({sources.include?.length || 0})</h4>
         {sources.include?.map((folder, idx) => (
-          <div key={idx} className={styles.activeItem}>
-            {folder.exists ? <Check size={14} className={styles.ok} /> : <X size={14} className={styles.missing} />}
-            <span>{folder.path}</span>
-            <span className={styles.count}>{folder.file_count} files</span>
-            <button onClick={() => removeSourceFolder(folder.path)}><Trash2 size={14} /></button>
+          <div key={idx} className={`${styles.activeItem} ${!folder.exists ? styles.missing : ''}`}>
+            <div className={styles.activeItemStatus}>
+              {folder.exists ? (
+                <Check size={14} className={styles.ok} title="Folder exists and is accessible" />
+              ) : (
+                <X size={14} className={styles.missing} title="Folder not found or not accessible" />
+              )}
+            </div>
+            <div className={styles.activeItemInfo}>
+              <span className={styles.activeItemPath}>{folder.path}</span>
+              <span className={styles.activeItemStats}>
+                {folder.exists ? `${folder.file_count} files` : 'Not accessible'}
+              </span>
+            </div>
+            <button 
+              onClick={() => removeSourceFolder(folder.path)} 
+              className={styles.removeActiveBtn}
+              title="Remove from active sources"
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         ))}
       </div>

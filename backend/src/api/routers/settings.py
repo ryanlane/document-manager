@@ -8,11 +8,14 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 import requests
 
 from src.db.session import get_db, SessionLocal
 from src.db.settings import get_setting, set_setting, get_all_settings
+from src.db.models import RawFile
+from src.config import load_config, save_config
 from src.services import jobs as jobs_service
 
 router = APIRouter(tags=["settings"])
@@ -270,9 +273,34 @@ async def update_chunk_enrichment_settings(
 
 @router.get("/settings/sources")
 async def get_sources(db: Session = Depends(get_db)):
-    """Get configured source folders."""
-    sources = get_setting(db, "sources") or {"folders": [], "excluded_folders": [], "file_extensions": []}
-    return sources
+    """Get configured source folders with metadata."""
+    config = load_config()
+    include_paths = config.get("sources", {}).get("include", [])
+    exclude_patterns = config.get("sources", {}).get("exclude", [])
+    
+    # Enrich include paths with file counts and existence checks
+    include_enriched = []
+    for path in include_paths:
+        path_obj = Path(path)
+        exists = path_obj.exists()
+        
+        # Count files from database for this path
+        file_count = 0
+        if exists:
+            file_count = db.query(func.count(RawFile.id)).filter(
+                RawFile.path.like(f"{path}%")
+            ).scalar() or 0
+        
+        include_enriched.append({
+            "path": path,
+            "exists": exists,
+            "file_count": file_count
+        })
+    
+    return {
+        "include": include_enriched,
+        "exclude": exclude_patterns
+    }
 
 
 @router.put("/settings/sources")
@@ -291,27 +319,39 @@ async def update_sources(sources: SourcesUpdate, db: Session = Depends(get_db)):
 
 
 @router.post("/settings/sources/include")
-async def add_source_folder(folder: str, db: Session = Depends(get_db)):
-    """Add a folder to the include list."""
-    sources = get_setting(db, "sources") or {"folders": []}
+async def add_source_folder(request: dict, db: Session = Depends(get_db)):
+    """Add a folder to the include list in config file."""
+    path = request.get("path")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
     
-    if folder not in sources.get("folders", []):
-        sources.setdefault("folders", []).append(folder)
-        set_setting(db, "sources", sources)
+    config = load_config()
+    include_paths = config.get("sources", {}).get("include", [])
     
-    return {"message": f"Added {folder}", "sources": sources}
+    if path not in include_paths:
+        include_paths.append(path)
+        config.setdefault("sources", {})["include"] = include_paths
+        save_config(config)
+    
+    return {"message": f"Added {path}", "success": True}
 
 
 @router.delete("/settings/sources/include")
-async def remove_source_folder(folder: str, db: Session = Depends(get_db)):
-    """Remove a folder from the include list."""
-    sources = get_setting(db, "sources") or {"folders": []}
+async def remove_source_folder(request: dict, db: Session = Depends(get_db)):
+    """Remove a folder from the include list in config file."""
+    path = request.get("path")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
     
-    if folder in sources.get("folders", []):
-        sources["folders"].remove(folder)
-        set_setting(db, "sources", sources)
+    config = load_config()
+    include_paths = config.get("sources", {}).get("include", [])
     
-    return {"message": f"Removed {folder}", "sources": sources}
+    if path in include_paths:
+        include_paths.remove(path)
+        config.setdefault("sources", {})["include"] = include_paths
+        save_config(config)
+    
+    return {"message": f"Removed {path}", "success": True}
 
 
 @router.post("/settings/sources/exclude")
@@ -339,23 +379,34 @@ async def remove_excluded_folder(folder: str, db: Session = Depends(get_db)):
 
 
 @router.get("/settings/sources/mounts")
-async def get_available_mounts():
-    """Get available mount points for browsing."""
-    if os.name == 'nt':
-        import string
-        from ctypes import windll
-        
-        drives = []
-        bitmask = windll.kernel32.GetLogicalDrives()
-        for letter in string.ascii_uppercase:
-            if bitmask & 1:
-                drives.append(f"{letter}:/")
-            bitmask >>= 1
-        return {"mounts": drives}
-    else:
-        common_mounts = ["/", "/home", "/mnt", "/media", "/var", "/opt"]
-        available = [m for m in common_mounts if os.path.exists(m)]
-        return {"mounts": available}
+async def get_available_mounts(db: Session = Depends(get_db)):
+    """Get available mount points from /data/archive directory."""
+    archive_root = Path("/data/archive")
+    mounts = []
+    
+    if archive_root.exists() and archive_root.is_dir():
+        try:
+            for item in sorted(archive_root.iterdir()):
+                if item.is_dir():
+                    # Count files in this directory from database
+                    file_count = db.query(func.count(RawFile.id)).filter(
+                        RawFile.path.like(f"{item}%")
+                    ).scalar() or 0
+                    
+                    mounts.append({
+                        "name": item.name,
+                        "path": str(item),
+                        "file_count": file_count,
+                        "exists": True
+                    })
+        except PermissionError:
+            pass
+    
+    # If no mounts found, return empty list
+    if not mounts:
+        mounts = []
+    
+    return {"mounts": mounts}
 
 
 @router.get("/settings/sources/browse")

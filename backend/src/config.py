@@ -16,3 +16,10 @@ def load_config():
     
     with open(path, "r") as f:
         return yaml.safe_load(f)
+
+
+def save_config(config):
+    """Save configuration back to the config file."""
+    path = Path(CONFIG_PATH)
+    with open(path, "w") as f:
+        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
