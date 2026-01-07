@@ -13,15 +13,17 @@ This project is designed for people who want to *understand* and *explore* their
 
 ## ✨ What Archive Brain Does
 
-- Ingests documents from local folders
-- Extracts text from PDFs, images (OCR), and plain text
-- Segments large documents into meaningful chunks
-- Uses local LLMs to generate:
+- **Ingests documents** from local folders automatically
+- **Extracts text** from PDFs, images (OCR), and plain text
+- **Segments** large documents into meaningful chunks
+- **Uses local LLMs** to generate:
   - Titles
   - Summaries
   - Tags
-- Builds vector embeddings for semantic search
-- Lets you ask natural-language questions over your archive
+- **Builds vector embeddings** for semantic search
+- **Gallery view** for browsing and analyzing images with vision models
+- **Real-time dashboard** showing pipeline progress and current processing phase
+- **Lets you ask** natural-language questions over your archive with RAG
 
 <p align="center">
   <img src="docs/images/ab-interact.png" alt="Archive Brain Search UI" width="600" />
@@ -60,8 +62,10 @@ docker compose -f docker-compose.yml --profile prod logs -f ollama-init
 
 Once running, open:
 
-* **Web UI:** [http://localhost:3000](http://localhost:3000)
-* **API:** [http://localhost:8000](http://localhost:8000)
+* **Web UI:** [http://localhost:3000](http://localhost:3000)  - Search your archive with semantic queries
+  - Browse files and images in gallery view
+  - Analyze images with AI vision models
+  - Monitor pipeline progress on the dashboard* **API:** [http://localhost:8000](http://localhost:8000)
 
 That’s it — the ingestion pipeline starts automatically.
 
@@ -91,13 +95,17 @@ Archive Brain runs a background pipeline:
 
 1. **Ingest** – Scan folders and extract raw content
 2. **Segment** – Split content into logical chunks
-3. **Enrich** – Generate metadata using LLMs
-4. **Embed** – Create vector embeddings for search
-5. **Retrieve & Generate** – Power semantic search and Q&A
+3. **Enrich Documents** – Generate metadata for full documents
+4. **Enrich Chunks** – Optionally enrich chunks (configurable mode)
+5. **Embed Documents** – Create vector embeddings for document-level search
+6. **Embed Chunks** – Create vector embeddings for chunk-level search
+7. **Retrieve & Generate** – Power semantic search and Q&A
+
+The dashboard shows real-time progress, including which phase the worker is currently processing and estimated completion times for each stage.
 
 <p align="center">
   <img src="docs/images/ab-dashboard.png" alt="Archive Brain Dashboard" width="600" />
-  <br><em>Dashboard: pipeline status and progress</em>
+  <br><em>Dashboard: pipeline status with real-time phase tracking</em>
 </p>
 
 ➡️ For details, see **[`docs/architecture.md`](docs/architecture.md)**.
@@ -115,6 +123,21 @@ Archive Brain runs a background pipeline:
 
 ---
 
+## 🖼️ Image Gallery & Analysis
+
+Archive Brain includes a dedicated gallery view for browsing and analyzing images:
+
+- **Grid and list views** for browsing all extracted images
+- **Lightbox viewer** with full-resolution display
+- **OCR text extraction** from images
+- **AI-powered descriptions** using vision models (LLaVA)
+- **On-demand analysis** - generate descriptions for any image with a single click
+- **Sortable views** - sort by date, filename, or file size
+
+Images are automatically extracted during ingestion and can be analyzed individually or in batch.
+
+---
+
 ## ⚙️ Configuration
 
 ```bash
@@ -123,9 +146,9 @@ cp .env.example .env
 
 Key settings:
 
-* `OLLAMA_MODEL` – Chat model
-* `OLLAMA_EMBEDDING_MODEL` – Embedding model
-* `OLLAMA_VISION_MODEL` – Vision model
+* `OLLAMA_MODEL` – Chat model for enrichment and Q&A
+* `OLLAMA_EMBEDDING_MODEL` – Embedding model for vector search
+* `OLLAMA_VISION_MODEL` – Vision model for image analysis
 * `DB_PASSWORD` – Database password
 
 Source folders and file types are defined in:
@@ -133,6 +156,26 @@ Source folders and file types are defined in:
 ```text
 config/config.yaml
 ```
+
+### Performance Tuning
+
+**Chunk Enrichment Mode**
+
+Control how chunks are processed to balance speed vs. metadata richness:
+
+- `none` – Skip chunk enrichment entirely (fastest)
+- `embed_only` – Only create embeddings, no LLM enrichment (recommended default)
+- `full` – Full LLM enrichment with titles, summaries, and tags (slowest)
+
+Change this in **Settings** via the web UI or by calling the API. The `embed_only` mode provides excellent search quality while dramatically reducing processing time.
+
+**Multi-Provider LLM Support**
+
+Archive Brain can distribute load across multiple LLM providers for faster processing:
+
+- Configure additional Ollama servers or cloud providers
+- Worker automatically balances requests across available providers
+- Improves throughput for large archives
 
 ---
 
@@ -182,10 +225,13 @@ docker compose -f docker-compose.yml --profile prod up -d --build
 
 ## 🚧 Current Limitations
 
-* Single-user only
-* No authentication or access control
-* Not optimized for real-time ingestion
-* Large archives may require batching or GPU acceleration
+* **Single-user only** - no multi-tenancy support
+* **No authentication** or access control
+* **Not optimized for real-time ingestion** - designed for batch processing
+* **Large archives** may require extended processing time
+  - Use `embed_only` mode for faster processing
+  - GPU acceleration recommended for 1M+ document archives
+* **Worker cycles through phases** - processes one type of task at a time (documents → chunks → embeddings)
 
 ---
 
